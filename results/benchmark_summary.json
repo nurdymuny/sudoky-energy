@@ -1,0 +1,159 @@
+{
+  "total_puzzles": 8,
+  "solvers_tested": [
+    "DFS",
+    "MCTS",
+    "DLX",
+    "Annealing"
+  ],
+  "difficulties": [
+    "easy",
+    "medium",
+    "hard",
+    "expert"
+  ],
+  "results_by_algorithm": {
+    "DFS": {
+      "accuracy": 87.5,
+      "avg_time_seconds": 0.15051819112511566,
+      "max_time_seconds": 0.5802510120001898,
+      "min_time_seconds": 0.01702420899982826,
+      "avg_memory_mb": 0.006136894226074219,
+      "total_solved": 7,
+      "total_tested": 8
+    },
+    "MCTS": {
+      "accuracy": 37.5,
+      "avg_time_seconds": 87.46361162525,
+      "max_time_seconds": 162.07280174600055,
+      "min_time_seconds": 0.03602722800042102,
+      "avg_memory_mb": 43.970219016075134,
+      "total_solved": 3,
+      "total_tested": 8
+    },
+    "DLX": {
+      "accuracy": 100.0,
+      "avg_time_seconds": 0.0236305439999569,
+      "max_time_seconds": 0.02935872199941514,
+      "min_time_seconds": 0.0157841099999132,
+      "avg_memory_mb": 0.11066818237304688,
+      "total_solved": 8,
+      "total_tested": 8
+    },
+    "Annealing": {
+      "accuracy": 87.5,
+      "avg_time_seconds": 13.790904182125018,
+      "max_time_seconds": 33.65966435199971,
+      "min_time_seconds": 0.482089516999622,
+      "avg_memory_mb": 0.007816672325134277,
+      "total_solved": 7,
+      "total_tested": 8
+    }
+  },
+  "results_by_difficulty": {
+    "easy": {
+      "DFS": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.030269409499851463,
+        "solved": 2,
+        "tested": 2
+      },
+      "MCTS": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.08425486350006395,
+        "solved": 2,
+        "tested": 2
+      },
+      "DLX": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.015973097999903985,
+        "solved": 2,
+        "tested": 2
+      },
+      "Annealing": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.7765665834999709,
+        "solved": 2,
+        "tested": 2
+      }
+    },
+    "medium": {
+      "DFS": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.08024841750057021,
+        "solved": 2,
+        "tested": 2
+      },
+      "MCTS": {
+        "accuracy": 50.0,
+        "avg_time_seconds": 57.00372315449977,
+        "solved": 1,
+        "tested": 2
+      },
+      "DLX": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.026911619499514927,
+        "solved": 2,
+        "tested": 2
+      },
+      "Annealing": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 18.039987170500353,
+        "solved": 2,
+        "tested": 2
+      }
+    },
+    "hard": {
+      "DFS": {
+        "accuracy": 50.0,
+        "avg_time_seconds": 0.3695317259998774,
+        "solved": 1,
+        "tested": 2
+      },
+      "MCTS": {
+        "accuracy": 0.0,
+        "avg_time_seconds": 149.6257255595001,
+        "solved": 0,
+        "tested": 2
+      },
+      "DLX": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.025387810000211175,
+        "solved": 2,
+        "tested": 2
+      },
+      "Annealing": {
+        "accuracy": 50.0,
+        "avg_time_seconds": 18.08637141049985,
+        "solved": 1,
+        "tested": 2
+      }
+    },
+    "expert": {
+      "DFS": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.1220232115001636,
+        "solved": 2,
+        "tested": 2
+      },
+      "MCTS": {
+        "accuracy": 0.0,
+        "avg_time_seconds": 143.14074292350006,
+        "solved": 0,
+        "tested": 2
+      },
+      "DLX": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 0.02624964850019751,
+        "solved": 2,
+        "tested": 2
+      },
+      "Annealing": {
+        "accuracy": 100.0,
+        "avg_time_seconds": 18.2606915639999,
+        "solved": 2,
+        "tested": 2
+      }
+    }
+  }
+}
