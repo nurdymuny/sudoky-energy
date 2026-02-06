@@ -12,7 +12,7 @@ The benchmark evaluated four different Sudoku solving algorithms against a set o
 | **DFS** (Backtracking) | 100.0% | 0.1481 | 0.6782 | 0.01 |
 | **Annealing** | 60.0% | 17.2805 | 36.4139 | 0.01 |
 | **MCTS** | 50.0% | 30.4054 | 60.0000 | 0.12 |
-| **CP Solver** | 40.0% | 0.0222 | 0.0646 | 0.66 |
+| **CP Solver** | 100.0% | 0.0499 | 0.2800 | 0.66 |
 
 ---
 
@@ -21,18 +21,18 @@ The benchmark evaluated four different Sudoku solving algorithms against a set o
 ### 1. Algorithm Accuracy by Difficulty
 | Difficulty | DLX | DFS | Annealing | MCTS | CP Solver |
 |------------|-----|-----|-----------|------|-----------|
-| **Easy** | 100% | 100% | 100% | 100% | 80% |
-| **Medium** | 100% | 100% | 100% | 100% | 60% |
-| **Hard** | 100% | 100% | 20% | 0% | 20% |
-| **Expert** | 100% | 100% | 20% | 0% | 0% |
+| **Easy** | 100% | 100% | 100% | 100% | 100% |
+| **Medium** | 100% | 100% | 100% | 100% | 100% |
+| **Hard** | 100% | 100% | 20% | 0% | 100% |
+| **Expert** | 100% | 100% | 20% | 0% | 100% |
 
 ### 2. Average Execution Time (Seconds)
 | Difficulty | DLX | DFS | Annealing | MCTS | CP Solver |
 |------------|-----|-----|-----------|------|-----------|
-| **Easy** | 0.0309 | 0.0450 | 3.8960 | 0.0915 | 0.0298 |
-| **Medium** | 0.0329 | 0.0714 | 8.6869 | 1.5299 | 0.0201 |
-| **Hard** | 0.0321 | 0.2804 | 29.0562 | 60.0000 | 0.0211 |
-| **Expert** | 0.0445 | 0.1956 | 27.4831 | 60.0000 | 0.0176 |
+| **Easy** | 0.0309 | 0.0450 | 3.8960 | 0.0915 | 0.0227 |
+| **Medium** | 0.0329 | 0.0714 | 8.6869 | 1.5299 | 0.0186 |
+| **Hard** | 0.0321 | 0.2804 | 29.0562 | 60.0000 | 0.0914 |
+| **Expert** | 0.0445 | 0.1956 | 27.4831 | 60.0000 | 0.0669 |
 
 ---
 
@@ -64,14 +64,14 @@ After integrating the **Constraint Programming (CP) Solver** and applying **Diff
 | **DFS** | 100.0% | 0.1481s | 0.01 MB | 1 |
 | **Annealing** (Tuned) | 60.0% | 17.2805s | 0.01 MB | 136,806 |
 | **MCTS** | 50.0% | 30.4054s | 0.12 MB | 9 |
-| **CP Solver** | 40.0% | 0.0222s | 0.66 MB | 0 |
+| **CP Solver** | 100.0% | 0.0499s | 0.66 MB | 6 |
 
 ### Key Observations
 
 1.  **DLX Dominance**: The Dancing Links implementation remains the fastest and most reliable algorithm for all difficulty levels.
-2.  **CP Solver Speed**: While its current accuracy is balanced by the simplicity of its strategies (Naked/Hidden Singles), the CP Solver is extremely fast on easy and medium puzzles, often solving them in under 20ms using pure logic.
+2.  **CP Solver Evaluation**: After fixing a logic bug in Hidden Singles, the CP Solver also achieves **100% accuracy**. It is significantly faster than DFS (approx. 2-5x faster) on all difficulties and competitive with DLX on Easy/Medium puzzles.
 3.  **Annealing Accuracy**: Tuning hyperparameters by difficulty improved Simulated Annealing's success rate to 60%, a significant jump from early un-tuned iterations.
-4.  **Scaling by Difficulty**: Accuracy drops linearly for non-deterministic solvers (MCTS, Annealing, CP) as difficulty increases, while DFS and DLX maintain 100% reliability.
+4.  **Scaling by Difficulty**: MCTS and Annealing struggle significantly as difficulty increases. However, DFS, DLX, and CP Solver maintain 100% reliability, with CP Solver showing better scaling characteristics than DFS.
 
 ### Visualizations
 

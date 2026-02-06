@@ -5,11 +5,12 @@ A comprehensive Sudoku puzzle generator and solver system featuring four distinc
 ## Features
 
 - **Puzzle Generator**: Create Sudoku puzzles with 4 difficulty levels (Easy, Medium, Hard, Expert)
-- **Four Solving Algorithms**:
+- **Five Solving Algorithms**:
   - Depth-First Search with Backtracking
-  - Monte Carlo Tree Search (MCTS)
+  - Constraint Programming (CP) Solver
   - Dancing Links (Knuth's Algorithm X)
   - Simulated Annealing
+  - Monte Carlo Tree Search (MCTS)
 - **Benchmarking**: Performance comparison with time, memory, and accuracy metrics
 - **Visualization**: Charts and comparison matrix
 
@@ -39,6 +40,7 @@ python -m sudoku.cli generate --count 10 --difficulty all
 python -m sudoku.cli solve --algorithm dfs --puzzle "puzzle_string"
 python -m sudoku.cli solve --algorithm mcts --puzzle "puzzle_string"
 python -m sudoku.cli solve --algorithm dlx --puzzle "puzzle_string"
+python -m sudoku.cli solve --algorithm cp --puzzle "puzzle_string"
 python -m sudoku.cli solve --algorithm annealing --puzzle "puzzle_string"
 ```
 
@@ -57,9 +59,10 @@ python -m sudoku.cli benchmark --puzzles 10 --difficulty hard --output results/
 | Algorithm | Best For | Time Complexity | Guaranteed Solution |
 |-----------|----------|-----------------|---------------------|
 | DFS+Backtracking | All puzzles | O(9^n) | Yes |
-| MCTS | Exploration | Configurable | No |
+| CP Solver | Logic-heavy puzzles | Mixed | Yes |
 | Dancing Links | Exact solving | O(branches) | Yes |
-| Simulated Annealing | Hard puzzles | O(iterations) | No |
+| Simulated Annealing | Heuristic Search | O(iterations) | No |
+| MCTS | Exploration | Configurable | No |
 
 ## Project Structure
 
