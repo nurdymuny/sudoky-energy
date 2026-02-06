@@ -24,7 +24,8 @@ class Visualizer:
         "DFS": "#2ecc71",       # Green
         "MCTS": "#3498db",      # Blue
         "DLX": "#9b59b6",       # Purple
-        "Annealing": "#e74c3c"  # Red
+        "Annealing": "#e74c3c", # Red
+        "CP": "#f39c12"         # Orange
     }
     
     def __init__(self, results: List[BenchmarkResult], output_dir: str = "results"):

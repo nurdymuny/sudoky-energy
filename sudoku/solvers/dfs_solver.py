@@ -76,23 +76,20 @@ class DFSSolver(BaseSolver):
             if self.use_constraint_propagation:
                 propagated_board = board.copy()
                 if self._propagate_constraints(propagated_board):
-                    # Copy propagated values back
+                    # Track which cells are filled by propagation
+                    propagated_cells = []
                     for i in range(board.size):
                         for j in range(board.size):
                             if board.is_empty(i, j) and not propagated_board.is_empty(i, j):
                                 board.set(i, j, propagated_board.get(i, j))
+                                propagated_cells.append((i, j))
                     
                     if self._backtrack(board):
                         return True
                     
                     # Undo propagated values
-                    for i in range(board.size):
-                        for j in range(board.size):
-                            if not propagated_board.is_empty(i, j) and cell != (i, j):
-                                orig_val = propagated_board.get(i, j)
-                                if board.get(i, j) == orig_val:
-                                    # Only clear if it was set by propagation
-                                    pass  # Keep it for now, clear later
+                    for i, j in propagated_cells:
+                        board.clear(i, j)
             else:
                 if self._backtrack(board):
                     return True

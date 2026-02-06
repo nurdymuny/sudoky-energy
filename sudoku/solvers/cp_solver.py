@@ -104,16 +104,19 @@ class CPSolver(BaseSolver):
 
     def _revise(self, xi: Tuple[int, int], xj: Tuple[int, int]) -> bool:
         """
-        Revised function for AC-3.
+        Standard AC-3 revise for the all-different constraint.
+        Removes any value from xi's domain that has no support in xj's domain.
         Returns True if domain of xi was modified.
         """
         revised = False
-        # If xj has only one possible value, xi cannot have that value
-        if len(self.domains[xj]) == 1:
-            val = next(iter(self.domains[xj]))
-            if val in self.domains[xi]:
-                self.domains[xi].remove(val)
-                revised = True
+        to_remove = []
+        for v in self.domains[xi]:
+            # v needs at least one w in domain(xj) with w != v
+            if not any(w != v for w in self.domains[xj]):
+                to_remove.append(v)
+        for v in to_remove:
+            self.domains[xi].discard(v)
+            revised = True
         return revised
 
     def _apply_naked_singles(self, board: SudokuBoard) -> bool:

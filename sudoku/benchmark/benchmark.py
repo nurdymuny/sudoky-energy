@@ -57,7 +57,8 @@ class Benchmark:
         "DFS": DFSSolver,
         "MCTS": MCTSSolver,
         "DLX": DLXSolver,
-        "Annealing": AnnealingSolver
+        "Annealing": AnnealingSolver,
+        "CP": CPSolver
     }
     
     def __init__(

@@ -6,7 +6,7 @@ import json
 from typing import Optional
 
 from .generator import SudokuGenerator, Difficulty
-from .solvers import DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver
+from .solvers import DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver, CPSolver
 from .benchmark import Benchmark
 from .benchmark.visualizer import Visualizer
 from .benchmark.tuner import Tuner

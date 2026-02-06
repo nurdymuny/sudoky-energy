@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 import time
 import tracemalloc
+import threading
 
 from ..core.board import SudokuBoard
 
@@ -45,6 +46,7 @@ class BaseSolver(ABC):
     """Abstract base class for Sudoku solvers."""
     
     name: str = "BaseSolver"
+    _tracemalloc_lock = threading.Lock()
     
     def __init__(self):
         self.stats = SolverStats(algorithm=self.name)
@@ -61,8 +63,9 @@ class BaseSolver(ABC):
         """
         self.stats = SolverStats(algorithm=self.name)
         
-        # Start memory tracking
-        tracemalloc.start()
+        # Start memory tracking (serialized to avoid tracemalloc thread conflicts)
+        with BaseSolver._tracemalloc_lock:
+            tracemalloc.start()
         
         # Start timing
         start_time = time.perf_counter()
@@ -78,8 +81,9 @@ class BaseSolver(ABC):
         self.stats.time_seconds = time.perf_counter() - start_time
         
         # Get memory usage
-        current, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+        with BaseSolver._tracemalloc_lock:
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
         self.stats.memory_bytes = peak
         
         return solution, self.stats

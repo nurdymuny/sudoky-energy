@@ -53,9 +53,9 @@ def update_benchmark():
     else:
         print(f"{RESULTS_FILE} not found. Running fresh?")
 
-    # 2. Filter out old CPSolver results
-    filtered_results = [r for r in old_results if r["algorithm"] != "CPSolver"]
-    print(f"Loaded {len(old_results)} results, kept {len(filtered_results)} after removing old CPSolver data.")
+    # 2. Filter out old CP results
+    filtered_results = [r for r in old_results if r["algorithm"] != "CP"]
+    print(f"Loaded {len(old_results)} results, kept {len(filtered_results)} after removing old CP data.")
     
     # 3. Load puzzles
     puzzles = load_puzzles()
@@ -66,14 +66,14 @@ def update_benchmark():
         print("No puzzles found. Aborting.")
         return
 
-    # 4. Initialize Benchmark with only CPSolver
-    benchmark = Benchmark(solvers={"CPSolver": CPSolver()})
+    # 4. Initialize Benchmark with only CP
+    benchmark = Benchmark(solvers={"CP": CPSolver()})
     
     # Manually inject puzzles
     benchmark.puzzles = puzzles
     
     # 5. Run Benchmark
-    print("Running CPSolver benchmark...")
+    print("Running CP benchmark...")
     new_results_objs = benchmark.run()
     new_results = [r.to_dict() for r in new_results_objs]
     
@@ -119,9 +119,6 @@ def update_benchmark():
     # 10. Update plots
     try:
         print("Updating plots...")
-        # Add CPSolver color
-        Visualizer.COLORS["CPSolver"] = "#f39c12"  # Orange
-        
         viz = Visualizer(all_result_objs, RESULTS_DIR)
         viz.generate_all()
         # Also generate markdown summary table
