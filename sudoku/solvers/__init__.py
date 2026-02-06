@@ -5,6 +5,7 @@ from .dfs_solver import DFSSolver
 from .mcts_solver import MCTSSolver
 from .dlx_solver import DLXSolver
 from .annealing_solver import AnnealingSolver
+from .cp_solver import CPSolver
 
 __all__ = [
     "BaseSolver", 
@@ -12,5 +13,6 @@ __all__ = [
     "DFSSolver", 
     "MCTSSolver", 
     "DLXSolver", 
-    "AnnealingSolver"
+    "AnnealingSolver",
+    "CPSolver"
 ]

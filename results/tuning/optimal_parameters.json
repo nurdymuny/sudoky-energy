@@ -1,0 +1,42 @@
+{
+  "easy": {
+    "params": {
+      "initial_temp": 1.0,
+      "cooling_rate": 0.9999,
+      "max_iterations": 100000,
+      "restarts": 3
+    },
+    "accuracy": 100.0,
+    "avg_time": 1.1971304095004598
+  },
+  "medium": {
+    "params": {
+      "initial_temp": 1.0,
+      "cooling_rate": 0.99995,
+      "max_iterations": 100000,
+      "restarts": 3
+    },
+    "accuracy": 100.0,
+    "avg_time": 11.157947005000096
+  },
+  "hard": {
+    "params": {
+      "initial_temp": 1.0,
+      "cooling_rate": 0.9999,
+      "max_iterations": 100000,
+      "restarts": 3
+    },
+    "accuracy": 50.0,
+    "avg_time": 21.775297387001046
+  },
+  "expert": {
+    "params": {
+      "initial_temp": 1.0,
+      "cooling_rate": 0.9999,
+      "max_iterations": 100000,
+      "restarts": 3
+    },
+    "accuracy": 50.0,
+    "avg_time": 32.87258466650019
+  }
+}

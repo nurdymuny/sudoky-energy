@@ -139,36 +139,51 @@ class Visualizer:
         return path
     
     def plot_accuracy_comparison(self) -> str:
-        """Create bar chart comparing solve accuracy."""
-        fig, ax = plt.subplots(figsize=(10, 6))
+        """Create grouped bar chart comparing solve accuracy by difficulty."""
+        fig, ax = plt.subplots(figsize=(12, 6))
         
         algorithms = sorted(set(r.algorithm for r in self.results))
-        accuracies = []
-        colors = []
+        difficulties = sorted(set(r.difficulty for r in self.results))
         
-        for algo in algorithms:
-            algo_results = [r for r in self.results if r.algorithm == algo]
-            solved = sum(1 for r in algo_results if r.solved)
-            accuracy = (solved / len(algo_results)) * 100 if algo_results else 0
-            accuracies.append(accuracy)
-            colors.append(self.COLORS.get(algo, "#95a5a6"))
+        x = np.arange(len(difficulties))
+        width = 0.8 / len(algorithms)
         
-        bars = ax.bar(algorithms, accuracies, color=colors, edgecolor='black', linewidth=0.5)
+        for i, algo in enumerate(algorithms):
+            accuracies = []
+            for diff in difficulties:
+                algo_diff_results = [
+                    r for r in self.results 
+                    if r.algorithm == algo and r.difficulty == diff
+                ]
+                solved = sum(1 for r in algo_diff_results if r.solved)
+                accuracy = (solved / len(algo_diff_results)) * 100 if algo_diff_results else 0
+                accuracies.append(accuracy)
+            
+            offset = (i - len(algorithms) / 2 + 0.5) * width
+            bars = ax.bar(x + offset, accuracies, width, 
+                         label=algo, 
+                         color=self.COLORS.get(algo, "#95a5a6"),
+                         edgecolor='black', linewidth=0.5)
+            
+            # Add percentage labels for small sets (optional, can be cluttered)
+            if len(difficulties) <= 4 and len(algorithms) <= 4:
+                for bar, acc in zip(bars, accuracies):
+                    height = bar.get_height()
+                    if height > 0:
+                        ax.annotate(f'{acc:.0f}%',
+                                   xy=(bar.get_x() + bar.get_width() / 2, height),
+                                   xytext=(0, 3),
+                                   textcoords="offset points",
+                                   ha='center', va='bottom', fontsize=8)
         
-        # Add percentage labels
-        for bar, acc in zip(bars, accuracies):
-            height = bar.get_height()
-            ax.annotate(f'{acc:.1f}%',
-                       xy=(bar.get_x() + bar.get_width() / 2, height),
-                       xytext=(0, 3),
-                       textcoords="offset points",
-                       ha='center', va='bottom', fontsize=11, fontweight='bold')
-        
-        ax.set_xlabel('Algorithm', fontsize=12)
+        ax.set_xlabel('Difficulty', fontsize=12)
         ax.set_ylabel('Accuracy (%)', fontsize=12)
-        ax.set_title('Solve Accuracy by Algorithm', fontsize=14, fontweight='bold')
-        ax.set_ylim(0, 110)
-        ax.axhline(y=100, color='gray', linestyle='--', alpha=0.5)
+        ax.set_title('Solve Accuracy by Difficulty and Algorithm', fontsize=14, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels([d.capitalize() for d in difficulties])
+        ax.legend(title='Algorithm', bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.set_ylim(0, 115)
+        ax.axhline(y=100, color='gray', linestyle='--', alpha=0.3)
         
         plt.tight_layout()
         path = os.path.join(self.output_dir, "accuracy_comparison.png")
@@ -245,37 +260,40 @@ class Visualizer:
         return path
     
     def plot_iterations_comparison(self) -> str:
-        """Create bar chart comparing iterations/operations."""
-        fig, ax = plt.subplots(figsize=(10, 6))
+        """Create grouped bar chart comparing average iterations by difficulty."""
+        fig, ax = plt.subplots(figsize=(12, 6))
         
         algorithms = sorted(set(r.algorithm for r in self.results))
-        avg_iterations = []
-        colors = []
+        difficulties = sorted(set(r.difficulty for r in self.results))
         
-        for algo in algorithms:
-            iterations = [r.iterations for r in self.results if r.algorithm == algo]
-            avg_iterations.append(np.mean(iterations))
-            colors.append(self.COLORS.get(algo, "#95a5a6"))
+        x = np.arange(len(difficulties))
+        width = 0.8 / len(algorithms)
         
-        bars = ax.bar(algorithms, avg_iterations, color=colors, edgecolor='black', linewidth=0.5)
+        for i, algo in enumerate(algorithms):
+            avg_iters = []
+            for diff in difficulties:
+                algo_diff_results = [
+                    r for r in self.results 
+                    if r.algorithm == algo and r.difficulty == diff
+                ]
+                iters = [r.iterations for r in algo_diff_results]
+                avg_iters.append(np.mean(iters) if iters else 0)
+            
+            offset = (i - len(algorithms) / 2 + 0.5) * width
+            ax.bar(x + offset, avg_iters, width, 
+                   label=algo, 
+                   color=self.COLORS.get(algo, "#95a5a6"),
+                   edgecolor='black', linewidth=0.5)
         
-        # Add value labels
-        for bar, iters in zip(bars, avg_iterations):
-            height = bar.get_height()
-            label = f'{int(iters):,}' if iters > 1000 else f'{iters:.0f}'
-            ax.annotate(label,
-                       xy=(bar.get_x() + bar.get_width() / 2, height),
-                       xytext=(0, 3),
-                       textcoords="offset points",
-                       ha='center', va='bottom', fontsize=10)
+        ax.set_xlabel('Difficulty', fontsize=12)
+        ax.set_ylabel('Average Iterations (Log Scale)', fontsize=12)
+        ax.set_title('Average Iterations by Difficulty and Algorithm', fontsize=14, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels([d.capitalize() for d in difficulties])
+        ax.legend(title='Algorithm', bbox_to_anchor=(1.05, 1), loc='upper left')
         
-        ax.set_xlabel('Algorithm', fontsize=12)
-        ax.set_ylabel('Average Iterations', fontsize=12)
-        ax.set_title('Average Iterations by Algorithm', fontsize=14, fontweight='bold')
-        ax.set_ylim(bottom=0)
-        
-        # Use scientific notation if needed
-        ax.ticklabel_format(style='scientific', axis='y', scilimits=(0, 4))
+        # Use log scale for iterations as they can vary by several orders of magnitude
+        ax.set_yscale('log')
         
         plt.tight_layout()
         path = os.path.join(self.output_dir, "iterations_comparison.png")

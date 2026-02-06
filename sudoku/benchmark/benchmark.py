@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from ..core.board import SudokuBoard
 from ..generator import SudokuGenerator, Difficulty
-from ..solvers import BaseSolver, DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver
+from ..solvers import BaseSolver, DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver, CPSolver
 
 
 @dataclass
@@ -89,13 +89,24 @@ class Benchmark:
                 "DFS": DFSSolver(),
                 "MCTS": MCTSSolver(max_iterations=5000),
                 "DLX": DLXSolver(),
-                "Annealing": AnnealingSolver(max_iterations=100000, restarts=3)
+                "Annealing": AnnealingSolver(max_iterations=100000, restarts=3),
+                "CPSolver": CPSolver()
             }
         else:
             self.solvers = solvers
         
-        self.results: List[BenchmarkResult] = []
         self.puzzles: Dict[str, List[SudokuBoard]] = {}
+        
+        # Load optimal parameters for Annealing if they exist
+        self.optimal_params = {}
+        opt_file = "results/tuning/optimal_parameters.json"
+        if os.path.exists(opt_file):
+            try:
+                with open(opt_file, "r") as f:
+                    self.optimal_params = json.load(f)
+                print(f"Loaded optimal parameters for Simulated Annealing from {opt_file}")
+            except Exception as e:
+                print(f"Warning: Could not load optimal parameters: {e}")
     
     def generate_puzzles(self) -> None:
         """Generate all puzzles for benchmarking."""
@@ -149,36 +160,57 @@ class Benchmark:
         solver: BaseSolver
     ) -> BenchmarkResult:
         """Run a single solver on a single puzzle."""
-        try:
-            # Run with timeout using thread
-            solution, stats = solver.solve(puzzle)
-            
-            return BenchmarkResult(
-                puzzle_id=puzzle_id,
-                difficulty=difficulty,
-                algorithm=solver_name,
-                solved=stats.solved,
-                time_seconds=stats.time_seconds,
-                memory_bytes=stats.memory_bytes,
-                iterations=stats.iterations,
-                backtracks=stats.backtracks,
-                nodes_explored=stats.nodes_explored,
-                extra=stats.extra
-            )
+        # Apply optimal parameters for Annealing based on difficulty
+        if solver_name == "Annealing" and difficulty in self.optimal_params:
+            params = self.optimal_params[difficulty].get("params", {})
+            for key, val in params.items():
+                if hasattr(solver, key):
+                    setattr(solver, key, val)
         
-        except Exception as e:
-            return BenchmarkResult(
-                puzzle_id=puzzle_id,
-                difficulty=difficulty,
-                algorithm=solver_name,
-                solved=False,
-                time_seconds=self.timeout_seconds,
-                memory_bytes=0,
-                iterations=0,
-                backtracks=0,
-                nodes_explored=0,
-                extra={"error": str(e)}
-            )
+        # Use ThreadPoolExecutor to enforce timeout
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(solver.solve, puzzle)
+            try:
+                solution, stats = future.result(timeout=self.timeout_seconds)
+                
+                return BenchmarkResult(
+                    puzzle_id=puzzle_id,
+                    difficulty=difficulty,
+                    algorithm=solver_name,
+                    solved=stats.solved,
+                    time_seconds=stats.time_seconds,
+                    memory_bytes=stats.memory_bytes,
+                    iterations=stats.iterations,
+                    backtracks=stats.backtracks,
+                    nodes_explored=stats.nodes_explored,
+                    extra=stats.extra
+                )
+            except TimeoutError:
+                return BenchmarkResult(
+                    puzzle_id=puzzle_id,
+                    difficulty=difficulty,
+                    algorithm=solver_name,
+                    solved=False,
+                    time_seconds=self.timeout_seconds,
+                    memory_bytes=0,
+                    iterations=0,
+                    backtracks=0,
+                    nodes_explored=0,
+                    extra={"error": "Timeout"}
+                )
+            except Exception as e:
+                return BenchmarkResult(
+                    puzzle_id=puzzle_id,
+                    difficulty=difficulty,
+                    algorithm=solver_name,
+                    solved=False,
+                    time_seconds=self.timeout_seconds,
+                    memory_bytes=0,
+                    iterations=0,
+                    backtracks=0,
+                    nodes_explored=0,
+                    extra={"error": str(e)}
+                )
     
     def get_summary(self) -> Dict[str, Any]:
         """Get summary statistics from benchmark results."""

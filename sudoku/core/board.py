@@ -102,6 +102,54 @@ class SudokuBoard:
         
         return all_values - used
     
+    def get_peers(self, row: int, col: int) -> Set[Tuple[int, int]]:
+        """
+        Get all peer cell positions (those in same row, column, or box).
+        Args:
+            row, col: Cell position.
+        Returns:
+            Set of (r, c) tuples, excluding (row, col) itself.
+        """
+        peers = set()
+        # Row and Col peers
+        for i in range(self.size):
+            peers.add((row, i))
+            peers.add((i, col))
+            
+        # Box peers
+        box_row = (row // self.box_size) * self.box_size
+        box_col = (col // self.box_size) * self.box_size
+        for i in range(self.box_size):
+            for j in range(self.box_size):
+                peers.add((box_row + i, box_col + j))
+                
+        peers.remove((row, col))
+        return peers
+
+    def is_valid_move(self, row: int, col: int, value: int) -> bool:
+        """
+        Check if placing value at (row, col) is valid.
+        """
+        if value == 0: return True
+        
+        # Check row
+        if value in self.grid[row, :]:
+            # If the value is already there, it's valid ONLY if it's at (row, col)
+            # But normally we call this BEFORE setting. 
+            # If we call it after setting, we need to be careful.
+            # Assuming we call it BEFORE setting:
+            return False
+            
+        # Check column
+        if value in self.grid[:, col]:
+            return False
+            
+        # Check box
+        if value in self.get_box(row, col):
+            return False
+            
+        return True
+    
     def get_empty_cells(self) -> List[Tuple[int, int]]:
         """Get list of all empty cell positions."""
         empty = []

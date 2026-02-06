@@ -1,0 +1,98 @@
+{
+  "easy": [
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.9999,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 100.0,
+      "avg_time": 1.1971304095004598,
+      "avg_iterations": 9471.5
+    },
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.99995,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 100.0,
+      "avg_time": 1.6590887719994498,
+      "avg_iterations": 13167.0
+    }
+  ],
+  "medium": [
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.9999,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 50.0,
+      "avg_time": 19.3177788410012,
+      "avg_iterations": 149289.0
+    },
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.99995,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 100.0,
+      "avg_time": 11.157947005000096,
+      "avg_iterations": 77441.5
+    }
+  ],
+  "hard": [
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.9999,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 50.0,
+      "avg_time": 21.775297387001046,
+      "avg_iterations": 170767.0
+    },
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.99995,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 0.0,
+      "avg_time": 40.754896800001006,
+      "avg_iterations": 300000.0
+    }
+  ],
+  "expert": [
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.9999,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 50.0,
+      "avg_time": 32.87258466650019,
+      "avg_iterations": 236163.5
+    },
+    {
+      "params": {
+        "initial_temp": 1.0,
+        "cooling_rate": 0.99995,
+        "max_iterations": 100000,
+        "restarts": 3
+      },
+      "accuracy": 50.0,
+      "avg_time": 22.059042371500254,
+      "avg_iterations": 170993.5
+    }
+  ]
+}

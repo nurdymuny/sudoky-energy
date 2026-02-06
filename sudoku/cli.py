@@ -9,6 +9,7 @@ from .generator import SudokuGenerator, Difficulty
 from .solvers import DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver
 from .benchmark import Benchmark
 from .benchmark.visualizer import Visualizer
+from .benchmark.tuner import Tuner
 from .core.board import SudokuBoard
 
 
@@ -57,9 +58,9 @@ Examples:
     solve_parser = subparsers.add_parser("solve", help="Solve a Sudoku puzzle")
     solve_parser.add_argument(
         "--algorithm", "-a",
-        choices=["dfs", "mcts", "dlx", "annealing", "all"],
-        default="dfs",
-        help="Solving algorithm (default: dfs)"
+        choices=["dfs", "mcts", "dlx", "annealing", "cp", "all"],
+        default="dlx",
+        help="Solving algorithm to use (default: dlx)"
     )
     solve_parser.add_argument(
         "--puzzle", "-p", type=str, required=True,
@@ -95,6 +96,27 @@ Examples:
         help="Skip chart generation"
     )
     
+    # Tune command
+    tune_parser = subparsers.add_parser("tune", help="Tune Simulated Annealing hyperparameters")
+    tune_parser.add_argument(
+        "--puzzles", "-n", type=int, default=10,
+        help="Number of puzzles to use for tuning (default: 10)"
+    )
+    tune_parser.add_argument(
+        "--difficulty", "-d",
+        choices=["easy", "medium", "hard", "expert", "all"],
+        default="hard",
+        help="Difficulty to use for tuning (default: hard)"
+    )
+    tune_parser.add_argument(
+        "--output", "-o", type=str, default="results/tuning",
+        help="Output directory for tuning results (default: results/tuning)"
+    )
+    tune_parser.add_argument(
+        "--quick", action="store_true",
+        help="Run a quicker, smaller grid search"
+    )
+    
     args = parser.parse_args()
     
     if args.command is None:
@@ -107,6 +129,8 @@ Examples:
         cmd_solve(args)
     elif args.command == "benchmark":
         cmd_benchmark(args)
+    elif args.command == "tune":
+        cmd_tune(args)
 
 
 def cmd_generate(args):
@@ -181,14 +205,16 @@ def cmd_solve(args):
             "DFS": DFSSolver(),
             "MCTS": MCTSSolver(max_iterations=5000),
             "DLX": DLXSolver(),
-            "Annealing": AnnealingSolver()
+            "Annealing": AnnealingSolver(),
+            "CP": CPSolver()
         }
     else:
         solver_map = {
             "dfs": ("DFS", DFSSolver()),
             "mcts": ("MCTS", MCTSSolver(max_iterations=5000)),
             "dlx": ("DLX", DLXSolver()),
-            "annealing": ("Annealing", AnnealingSolver())
+            "annealing": ("Annealing", AnnealingSolver()),
+            "cp": ("CP", CPSolver())
         }
         name, solver = solver_map[args.algorithm]
         solvers = {name: solver}
@@ -226,17 +252,19 @@ def cmd_benchmark(args):
     print("=" * 60)
     print(f"Puzzles per difficulty: {args.puzzles}")
     print(f"Difficulties: {[d.value for d in difficulties]}")
-    print(f"Algorithms: DFS, MCTS, DLX, Simulated Annealing")
-    print(f"Output directory: {args.output}")
-    print("=" * 60)
     
-    # Run benchmark
+    # Initialize benchmark to get solvers list
     benchmark = Benchmark(
         puzzles_per_difficulty=args.puzzles,
         difficulties=difficulties,
         seed=args.seed
     )
     
+    print(f"Algorithms: {', '.join(benchmark.solvers.keys())}")
+    print(f"Output directory: {args.output}")
+    print("=" * 60)
+    
+    # Run benchmark
     results = benchmark.run()
     
     # Print summary
@@ -269,6 +297,54 @@ def cmd_benchmark(args):
     
     print("\n" + "=" * 60)
     print("Benchmark complete!")
+
+
+def cmd_tune(args):
+    """Handle the tune command."""
+    # Parse difficulties
+    if args.difficulty == "all":
+        difficulties = list(Difficulty)
+    else:
+        difficulties = [Difficulty(args.difficulty)]
+        
+    print("=" * 60)
+    print("SIMULATED ANNEALING HYPERPARAMETER TUNING")
+    print("=" * 60)
+    print(f"Puzzles: {args.puzzles}")
+    print(f"Difficulties: {[d.value for d in difficulties]}")
+    print(f"Output directory: {args.output}")
+    print("=" * 60)
+    
+    tuner = Tuner(
+        puzzles_count=args.puzzles,
+        difficulties=difficulties,
+        output_dir=args.output
+    )
+    
+    if args.quick:
+        results = tuner.tune_annealing(
+            initial_temps=[1.0],
+            cooling_rates=[0.9999, 0.99995],
+            max_iterations_list=[100000],
+            restarts_list=[3]
+        )
+    else:
+        # Full grid search for all difficulties
+        results = tuner.tune_annealing()
+        
+    print("\n" + "=" * 60)
+    print("TUNING COMPLETE")
+    print("=" * 60)
+    
+    for diff in [d.value for d in difficulties]:
+        best = tuner.get_best_params(diff)
+        acc = max(r.accuracy for r in results[diff])
+        print(f"\nDifficulty: {diff}")
+        print(f"  Best Accuracy: {acc:.1f}%")
+        print(f"  Best Parameters: {best}")
+    
+    print("\nVisualization and optimal parameters saved to:", args.output)
+    print("=" * 60)
 
 
 if __name__ == "__main__":
