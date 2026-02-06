@@ -91,7 +91,7 @@ class Benchmark:
                 "MCTS": MCTSSolver(max_iterations=5000),
                 "DLX": DLXSolver(),
                 "Annealing": AnnealingSolver(max_iterations=100000, restarts=3),
-                "CPSolver": CPSolver()
+                "CP": CPSolver()
             }
         else:
             self.solvers = solvers
