@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from ..core.board import SudokuBoard
 from ..generator import SudokuGenerator, Difficulty
-from ..solvers import BaseSolver, DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver, CPSolver
+from ..solvers import BaseSolver, DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver, CPSolver, DavisManifoldSolver
 
 
 @dataclass
@@ -58,7 +58,8 @@ class Benchmark:
         "MCTS": MCTSSolver,
         "DLX": DLXSolver,
         "Annealing": AnnealingSolver,
-        "CP": CPSolver
+        "CP": CPSolver,
+        "Davis": DavisManifoldSolver
     }
     
     def __init__(
@@ -91,7 +92,8 @@ class Benchmark:
                 "MCTS": MCTSSolver(max_iterations=5000),
                 "DLX": DLXSolver(),
                 "Annealing": AnnealingSolver(max_iterations=100000, restarts=3),
-                "CP": CPSolver()
+                "CP": CPSolver(),
+                "Davis": DavisManifoldSolver()
             }
         else:
             self.solvers = solvers

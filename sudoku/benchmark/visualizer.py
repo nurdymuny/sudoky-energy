@@ -25,7 +25,8 @@ class Visualizer:
         "MCTS": "#3498db",      # Blue
         "DLX": "#9b59b6",       # Purple
         "Annealing": "#e74c3c", # Red
-        "CP": "#f39c12"         # Orange
+        "CP": "#f39c12",        # Orange
+        "Davis": "#1abc9c"      # Teal
     }
     
     def __init__(self, results: List[BenchmarkResult], output_dir: str = "results"):

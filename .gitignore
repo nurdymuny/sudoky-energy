@@ -136,3 +136,27 @@ cython_debug/
 
 # Project Specific
 *.log
+
+# CUDA / GPU build artifacts
+*.exe
+*.dll
+*.obj
+*.pdb
+*.exp
+*.lib
+*.o
+*.cubin
+*.fatbin
+*.ptx
+
+# LaTeX build artifacts
+*.aux
+*.out
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg

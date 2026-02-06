@@ -6,7 +6,7 @@ import json
 from typing import Optional
 
 from .generator import SudokuGenerator, Difficulty
-from .solvers import DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver, CPSolver
+from .solvers import DFSSolver, MCTSSolver, DLXSolver, AnnealingSolver, CPSolver, DavisManifoldSolver
 from .benchmark import Benchmark
 from .benchmark.visualizer import Visualizer
 from .benchmark.tuner import Tuner
@@ -58,7 +58,7 @@ Examples:
     solve_parser = subparsers.add_parser("solve", help="Solve a Sudoku puzzle")
     solve_parser.add_argument(
         "--algorithm", "-a",
-        choices=["dfs", "mcts", "dlx", "annealing", "cp", "all"],
+        choices=["dfs", "mcts", "dlx", "annealing", "cp", "davis", "all"],
         default="dlx",
         help="Solving algorithm to use (default: dlx)"
     )
@@ -206,7 +206,8 @@ def cmd_solve(args):
             "MCTS": MCTSSolver(max_iterations=5000),
             "DLX": DLXSolver(),
             "Annealing": AnnealingSolver(),
-            "CP": CPSolver()
+            "CP": CPSolver(),
+            "Davis": DavisManifoldSolver()
         }
     else:
         solver_map = {
@@ -214,7 +215,8 @@ def cmd_solve(args):
             "mcts": ("MCTS", MCTSSolver(max_iterations=5000)),
             "dlx": ("DLX", DLXSolver()),
             "annealing": ("Annealing", AnnealingSolver()),
-            "cp": ("CP", CPSolver())
+            "cp": ("CP", CPSolver()),
+            "davis": ("Davis", DavisManifoldSolver())
         }
         name, solver = solver_map[args.algorithm]
         solvers = {name: solver}
