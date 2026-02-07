@@ -10,7 +10,8 @@ A Sudoku solver framework featuring seven solving algorithms—including a **CUD
 
 - **Davis Manifold GPU Solver** — a three-phase CUDA pipeline (wavefront propagation → manifold relaxation → curvature-directed DFS) that exploits the intrinsic curvature field of the constraint manifold to guide GPU thread scheduling
 - **1,226× speedup** over the CPU baseline on 15-clue extreme puzzles
-- **11/11 hardest known Sudoku instances solved** — including AI Escargot, Inkala 2010, Golden Nugget, Easter Monster, Platinum Blonde, and champagne — all in 20–49ms on GPU
+- **11/11 hardest known Sudoku instances solved** — including AI Escargot, Inkala 2010, Golden Nugget, Easter Monster, Platinum Blonde, and champagne — all in 20–49ms on GPU, 4–420ms on CPU
+- **73× Davis CPU speedup** via bitmask candidate tracking with curvature-ordered MRV and holonomy pruning
 - **Trichotomy gating** ($\Gamma$ parameter) automatically routes instances to the optimal phase combination
 - 19-page academic paper with full mathematical framework, proofs, and empirical results
 - Patent pending (U.S. Provisional, February 2026)
@@ -20,7 +21,7 @@ A Sudoku solver framework featuring seven solving algorithms—including a **CUD
 | Algorithm | Type | Hardware | 15-Clue Solve Time | Guaranteed |
 |-----------|------|----------|-------------------|------------|
 | **Davis GPU** | Curvature-guided wavefront | CUDA (sm_80+) | **3.85 µs** (batch) | Yes |
-| Davis CPU | Curvature-guided DFS | Python | ~25,012 ms | Yes |
+| Davis CPU | Curvature-guided DFS (bitmask) | Python | ~104 ms | Yes |
 | DLX | Dancing Links (Algorithm X) | Python | ~78 ms | Yes |
 | CP | Constraint Programming | Python | ~3,066 ms | Yes |
 | DFS | Backtracking | Python | ~4,195 ms | Yes |
@@ -29,24 +30,24 @@ A Sudoku solver framework featuring seven solving algorithms—including a **CUD
 
 ## World's Hardest Puzzles Benchmark
 
-Tested against 11 famous "hardest known Sudoku" instances designed to maximize backtracking in brute-force solvers. The Davis GPU solver is the only solver to solve all 11 under 50ms.
+Tested against 11 famous "hardest known Sudoku" instances designed to maximize backtracking in brute-force solvers. Both the Davis GPU and Davis CPU solvers solve all 11.
 
-| Puzzle | Clues | Davis GPU | DLX | DFS | CP |
-|--------|------:|----------:|----:|----:|---:|
-| AI Escargot (Inkala 2006) | 23 | **48.4 ms** | 115 ms | 3,251 ms | 6,081 ms |
-| Inkala 2010 | 21 | **27.8 ms** | 213 ms | timeout | 56,158 ms |
-| Golden Nugget | 21 | **33.0 ms** | 261 ms | timeout | timeout |
-| Easter Monster | 21 | **23.9 ms** | 777 ms | timeout | timeout |
-| Platinum Blonde | 21 | **31.3 ms** | 707 ms | timeout | 46,929 ms |
-| Tarek071 | 17 | **23.2 ms** | 461 ms | 2,249 ms | 5,763 ms |
-| 17-clue Coloin | 17 | **20.2 ms** | 350 ms | 2,697 ms | 3,750 ms |
-| Escargot variant | 19 | **25.0 ms** | 152 ms | 14,050 ms | 23,857 ms |
-| Norvig hard1 | 17 | **20.3 ms** | 854 ms | timeout | 23,880 ms |
-| Inkala (Norvig hardest) | 22 | **21.9 ms** | 230 ms | 12,872 ms | 30,312 ms |
-| champagne 2010 | 18 | **48.9 ms** | 208 ms | 29,691 ms | 28,623 ms |
-| **Total solved** | | **11/11** | **11/11** | **6/11** | **9/11** |
+| Puzzle | Clues | Davis GPU | Davis CPU | DLX | DFS | CP |
+|--------|------:|----------:|----------:|----:|----:|---:|
+| AI Escargot (Inkala 2006) | 23 | **48.4 ms** | 104 ms | 115 ms | 3,251 ms | 6,081 ms |
+| Inkala 2010 | 21 | **27.8 ms** | 112 ms | 213 ms | timeout | 56,158 ms |
+| Golden Nugget | 21 | **33.0 ms** | 108 ms | 261 ms | timeout | timeout |
+| Easter Monster | 21 | **23.9 ms** | 385 ms | 777 ms | timeout | timeout |
+| Platinum Blonde | 21 | **31.3 ms** | 420 ms | 707 ms | timeout | 46,929 ms |
+| Tarek071 | 17 | **23.2 ms** | 314 ms | 461 ms | 2,249 ms | 5,763 ms |
+| 17-clue Coloin | 17 | **20.2 ms** | 50 ms | 350 ms | 2,697 ms | 3,750 ms |
+| Escargot variant | 19 | **25.0 ms** | 4 ms | 152 ms | 14,050 ms | 23,857 ms |
+| Norvig hard1 | 17 | **20.3 ms** | 116 ms | 854 ms | timeout | 23,880 ms |
+| Inkala (Norvig hardest) | 22 | **21.9 ms** | 4 ms | 230 ms | 12,872 ms | 30,312 ms |
+| champagne 2010 | 18 | **48.9 ms** | 57 ms | 208 ms | 29,691 ms | 28,623 ms |
+| **Total solved** | | **11/11** | **11/11** | **11/11** | **6/11** | **9/11** |
 
-> DFS timeout = 60s, CP timeout = 60s. GPU times are CUDA kernel time (excluding host transfer).
+> DFS timeout = 60s, CP timeout = 60s. GPU times are CUDA kernel time (excluding host transfer). Davis CPU uses bitmask candidate tracking with curvature-ordered MRV.
 
 ## Installation
 
