@@ -37,6 +37,7 @@
 #include <cooperative_groups.h>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <cfloat>
 #include <chrono>
@@ -1387,6 +1388,43 @@ void print_board(const int* board) {
     }
 }
 
+// Parse an 81-character digit string (0 or '.' = empty) into int[81]
+bool parse_puzzle_string(const char* s, int* puzzle) {
+    int len = 0;
+    for (int i = 0; s[i] != '\0'; i++) {
+        char c = s[i];
+        if (c >= '0' && c <= '9') {
+            if (len >= 81) return false;
+            puzzle[len++] = c - '0';
+        } else if (c == '.') {
+            if (len >= 81) return false;
+            puzzle[len++] = 0;
+        }
+        // Skip whitespace, commas, etc.
+    }
+    return (len == 81);
+}
+
+// Load puzzles from a file (one 81-char line per puzzle)
+int load_puzzles_from_file(const char* path, int* puzzles, int max_puzzles) {
+    FILE* fp = fopen(path, "r");
+    if (!fp) { printf("Error: cannot open %s\n", path); return 0; }
+    char line[256];
+    int count = 0;
+    while (fgets(line, sizeof(line), fp) && count < max_puzzles) {
+        // Strip newline
+        int len = strlen(line);
+        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = '\0';
+        if (len < 81) continue;  // Skip short lines / comments
+        if (line[0] == '#') continue;  // Skip comments
+        if (parse_puzzle_string(line, &puzzles[count * 81])) {
+            count++;
+        }
+    }
+    fclose(fp);
+    return count;
+}
+
 int main(int argc, char** argv) {
     printf("============================================================\n");
     printf("  Davis Manifold Sudoku Solver — Blackwell GPU Edition\n");
@@ -1404,7 +1442,67 @@ int main(int argc, char** argv) {
            prop.multiProcessorCount,
            prop.totalGlobalMem / 1e9);
 
-    // Demo puzzle (hard, 15 clues)
+    DavisSolverGPU solver;
+
+    // --- Mode 1: --file <path> — load multiple puzzles from file ---
+    if (argc >= 3 && strcmp(argv[1], "--file") == 0) {
+        int* all_puzzles = new int[MAX_BATCH * 81];
+        int count = load_puzzles_from_file(argv[2], all_puzzles, MAX_BATCH);
+        if (count == 0) { printf("No valid puzzles loaded.\n"); delete[] all_puzzles; return 1; }
+
+        printf("Loaded %d puzzles from %s\n\n", count, argv[2]);
+
+        int* all_solutions = new int[count * 81];
+        int total_solved = 0;
+
+        // Solve each individually so we can report per-puzzle stats
+        for (int i = 0; i < count; i++) {
+            int* puz = &all_puzzles[i * 81];
+            int* sol = &all_solutions[i * 81];
+
+            auto t0 = std::chrono::high_resolution_clock::now();
+            SolverStats stats = solver.solve_batch(puz, sol, 1);
+            auto t1 = std::chrono::high_resolution_clock::now();
+            float wall_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+
+            int solved = stats.solved_phase1 + stats.solved_phase2 + stats.solved_phase3;
+            total_solved += solved;
+            int clues = 0;
+            for (int c = 0; c < 81; c++) if (puz[c] != 0) clues++;
+
+            printf("Puzzle %2d (%2d clues): %s  Wall: %7.3f ms  GPU: %7.3f ms  "
+                   "P1: %.3f  P2: %.3f  P3: %.3f ms\n",
+                   i + 1, clues,
+                   solved ? "SOLVED" : "FAILED",
+                   wall_ms, stats.total_time_ms,
+                   stats.phase1_time_ms, stats.phase2_time_ms, stats.phase3_time_ms);
+        }
+        printf("\n============================================================\n");
+        printf("  Total: %d / %d solved\n", total_solved, count);
+        printf("============================================================\n");
+
+        // Also run as a batch for throughput measurement
+        if (count > 1) {
+            printf("\nBatch mode (%d puzzles simultaneously):\n", count);
+            auto bt0 = std::chrono::high_resolution_clock::now();
+            SolverStats bstats = solver.solve_batch(all_puzzles, all_solutions, count);
+            auto bt1 = std::chrono::high_resolution_clock::now();
+            float bwall = std::chrono::duration<float, std::milli>(bt1 - bt0).count();
+            int bsolved = bstats.solved_phase1 + bstats.solved_phase2 + bstats.solved_phase3;
+            printf("  Wall time:     %.3f ms\n", bwall);
+            printf("  GPU time:      %.3f ms\n", bstats.total_time_ms);
+            printf("  Solved: %d / %d  (P1: %d, P2: %d, P3: %d)\n",
+                   bsolved, count,
+                   bstats.solved_phase1, bstats.solved_phase2, bstats.solved_phase3);
+        }
+
+        delete[] all_puzzles;
+        delete[] all_solutions;
+        return 0;
+    }
+
+    // --- Mode 2: puzzle string on command line (81 digits) ---
+    // Default demo puzzle (hard, 15 clues)
     int puzzle[81] = {
         0, 0, 0, 0, 0, 0, 0, 1, 2,
         0, 0, 0, 0, 3, 5, 0, 0, 0,
@@ -1417,12 +1515,27 @@ int main(int argc, char** argv) {
         6, 5, 0, 0, 0, 0, 0, 0, 0,
     };
 
+    // Check if first arg is a puzzle string (81+ chars, not a number for batch)
+    bool custom_puzzle = false;
+    if (argc > 1) {
+        const char* arg = argv[1];
+        int digit_count = 0;
+        for (int i = 0; arg[i]; i++) {
+            if ((arg[i] >= '0' && arg[i] <= '9') || arg[i] == '.') digit_count++;
+        }
+        if (digit_count == 81) {
+            if (parse_puzzle_string(arg, puzzle)) {
+                custom_puzzle = true;
+                printf("Custom puzzle loaded from command line.\n\n");
+            }
+        }
+    }
+
     printf("Input puzzle:\n");
     print_board(puzzle);
     printf("\n");
 
     // Single puzzle solve
-    DavisSolverGPU solver;
     int solution[81];
 
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -1445,16 +1558,22 @@ int main(int argc, char** argv) {
            stats.total_puzzles,
            stats.solved_phase1, stats.solved_phase2, stats.solved_phase3);
 
-    // Batch benchmark
-    if (argc > 1) {
-        int batch_size = atoi(argv[1]);
+    // --- Mode 3: batch benchmark (replicate single puzzle) ---
+    int batch_arg = 0;
+    if (argc > 1 && !custom_puzzle) {
+        batch_arg = atoi(argv[1]);
+    } else if (argc > 2 && custom_puzzle) {
+        batch_arg = atoi(argv[2]);
+    }
+
+    if (batch_arg > 0) {
+        int batch_size = batch_arg;
         if (batch_size > MAX_BATCH) batch_size = MAX_BATCH;
 
         printf("\n============================================================\n");
         printf("  Batch Benchmark: %d puzzles\n", batch_size);
         printf("============================================================\n");
 
-        // Generate batch (replicate the demo puzzle for now)
         int* batch_in  = new int[batch_size * 81];
         int* batch_out = new int[batch_size * 81];
         for (int p = 0; p < batch_size; p++) {

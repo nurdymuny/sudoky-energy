@@ -1,0 +1,49 @@
+# World's Hardest Sudoku Puzzles — curated from published sources
+# Format: 81 digits per line (0 or . = empty), # = comment
+#
+# These puzzles are specifically designed to maximize backtracking
+# in brute-force solvers and are the standard benchmark for solver difficulty.
+
+# 1. AI Escargot (Arto Inkala, 2006) — "the most difficult Sudoku"
+# 23 clues. Rated SE 11.4. Requires extensive chain reasoning.
+100007090030020008009600500005300900010080002600004000300000010040000007007000300
+
+# 2. Inkala's 2010 Puzzle — claimed "hardest Sudoku ever created"
+# 21 clues. Requires multi-step forcing chains.
+800000000003600000070090200050007000000045700000100030001000068008500010090000400
+
+# 3. Golden Nugget — one of the hardest known puzzles
+# 21 clues. Extreme difficulty rating.
+000000039000001005003050800008090006070002000100400000009080050020000600400700000
+
+# 4. Easter Monster — extreme difficulty
+# 22 clues. Requires Swordfish + XY-Wing chains.
+100000002090400050006000700050903000000070000000850040700000600030009080002000001
+
+# 5. Platinum Blonde — near-minimal puzzle with extreme difficulty
+# 21 clues. Named for its deceptively simple appearance.
+000000012000000003002300400001800005060070800000009000008500000900040500470006000
+
+# 6. Tarek071 (tarek, 2007) — famous benchmark puzzle
+# 21 clues. Extreme backtracking depth.
+000000000000003085001020000000507000004000100090000000500000073002010000000040009
+
+# 7. Coloin's 17-clue extreme (17 clues — near theoretical minimum)
+# 17 clues is the proven minimum for a unique solution.
+000000010400000000020000000000050407008000300001090000300400200050100000000806000
+
+# 8. Escargot variant (Inkala) — another extreme construction
+# 22 clues.
+000200000060010700008000050500004000700000002009300000000700400040060009001000030
+
+# 9. Peter Norvig's "hard1" — used in his famous Sudoku essay
+# 21 clues. The benchmark puzzle from norvig.com/sudoku.html
+400000805030000000000700000020000060000080400000010000000603070500200000104000000
+
+# 10. Inkala (Norvig hardest #1) — verified from norvig.com/hardest.txt
+# 22 clues. First puzzle in Peter Norvig's curated "hardest" collection.
+850002400720000009004000000000107002305000900040000000000080070017000000000036040
+
+# 11. "champagne" (champagne, 2010) — hardest-for-backtracking class
+# Requires 100K+ backtracks in naive DFS.
+000000000000000000009010800000700360060300008001006000080020900000005020070000004

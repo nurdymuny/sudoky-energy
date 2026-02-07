@@ -126,6 +126,7 @@ class CPSolver(BaseSolver):
             if board.get(r, c) == 0 and len(domain) == 1:
                 val = next(iter(domain))
                 board.set(r, c, val)
+                self.stats.nodes_explored += 1
                 changed = True
         return changed
 
@@ -183,6 +184,7 @@ class CPSolver(BaseSolver):
                 r, c = positions[0]
                 board.set(r, c, val)
                 self.domains[(r, c)] = {val}
+                self.stats.nodes_explored += 1
                 changed = True
         return changed
 
@@ -208,6 +210,7 @@ class CPSolver(BaseSolver):
                 # Apply move
                 board.set(r, c, val)
                 self.domains[(r, c)] = {val}
+                self.stats.nodes_explored += 1
                 
                 # Propagate
                 if self._enforce_arc_consistency(board):
@@ -218,5 +221,6 @@ class CPSolver(BaseSolver):
                 # Backtrack
                 board.set(r, c, 0)
                 self.domains = {pos: domain.copy() for pos, domain in original_domains.items()}
+                self.stats.backtracks += 1
                 
         return None

@@ -3,11 +3,14 @@
 A Sudoku solver framework featuring seven solving algorithms—including a **CUDA GPU solver** based on the geometry of the **Davis manifold**—with comparative benchmarking, visualizations, and an accompanying academic paper.
 
 > **260,042 puzzles/sec** on a single laptop GPU. 65,536/65,536 solved. Zero failures.
+>
+> **11/11 world's hardest Sudoku puzzles solved** — AI Escargot, Golden Nugget, Easter Monster, champagne — all under 50ms on GPU.
 
 ## Highlights
 
 - **Davis Manifold GPU Solver** — a three-phase CUDA pipeline (wavefront propagation → manifold relaxation → curvature-directed DFS) that exploits the intrinsic curvature field of the constraint manifold to guide GPU thread scheduling
 - **1,226× speedup** over the CPU baseline on 15-clue extreme puzzles
+- **11/11 hardest known Sudoku instances solved** — including AI Escargot, Inkala 2010, Golden Nugget, Easter Monster, Platinum Blonde, and champagne — all in 20–49ms on GPU
 - **Trichotomy gating** ($\Gamma$ parameter) automatically routes instances to the optimal phase combination
 - 19-page academic paper with full mathematical framework, proofs, and empirical results
 - Patent pending (U.S. Provisional, February 2026)
@@ -23,6 +26,27 @@ A Sudoku solver framework featuring seven solving algorithms—including a **CUD
 | DFS | Backtracking | Python | ~4,195 ms | Yes |
 | Annealing | Simulated Annealing | Python | Variable | No |
 | MCTS | Monte Carlo Tree Search | Python | Variable | No |
+
+## World's Hardest Puzzles Benchmark
+
+Tested against 11 famous "hardest known Sudoku" instances designed to maximize backtracking in brute-force solvers. The Davis GPU solver is the only solver to solve all 11 under 50ms.
+
+| Puzzle | Clues | Davis GPU | DLX | DFS | CP |
+|--------|------:|----------:|----:|----:|---:|
+| AI Escargot (Inkala 2006) | 23 | **48.4 ms** | 115 ms | 3,251 ms | 6,081 ms |
+| Inkala 2010 | 21 | **27.8 ms** | 213 ms | timeout | 56,158 ms |
+| Golden Nugget | 21 | **33.0 ms** | 261 ms | timeout | timeout |
+| Easter Monster | 21 | **23.9 ms** | 777 ms | timeout | timeout |
+| Platinum Blonde | 21 | **31.3 ms** | 707 ms | timeout | 46,929 ms |
+| Tarek071 | 17 | **23.2 ms** | 461 ms | 2,249 ms | 5,763 ms |
+| 17-clue Coloin | 17 | **20.2 ms** | 350 ms | 2,697 ms | 3,750 ms |
+| Escargot variant | 19 | **25.0 ms** | 152 ms | 14,050 ms | 23,857 ms |
+| Norvig hard1 | 17 | **20.3 ms** | 854 ms | timeout | 23,880 ms |
+| Inkala (Norvig hardest) | 22 | **21.9 ms** | 230 ms | 12,872 ms | 30,312 ms |
+| champagne 2010 | 18 | **48.9 ms** | 208 ms | 29,691 ms | 28,623 ms |
+| **Total solved** | | **11/11** | **11/11** | **6/11** | **9/11** |
+
+> DFS timeout = 60s, CP timeout = 60s. GPU times are CUDA kernel time (excluding host transfer).
 
 ## Installation
 
@@ -66,11 +90,21 @@ python -m sudoku.cli solve --algorithm mcts --puzzle "puzzle_string"
 ```bash
 cd sudoku/solvers/davis_gpu_solver
 
-# Single puzzle
-./davis_solver.exe
+# Single puzzle (81-digit string, 0 = empty)
+./davis_solver.exe "100007090030020008009600500005300900010080002600004000300000010040000007007000300"
 
 # Batch benchmark (65,536 puzzles)
 ./davis_solver.exe 65536
+
+# Solve from file (one puzzle per line)
+./davis_solver.exe --file ../../../puzzles/hardest/hardest_puzzles.txt
+```
+
+### Hardest Puzzles Benchmark
+
+```bash
+# All 5 solvers vs 11 world's hardest puzzles
+python scripts/benchmark_hardest.py
 ```
 
 ### Benchmarks

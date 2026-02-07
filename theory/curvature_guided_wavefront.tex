@@ -514,42 +514,9 @@ Figure~\ref{fig:benchmark} compares the Davis GPU solver against four CPU-based 
 \label{fig:benchmark}
 \end{figure}
 
-\subsection{Hardest Known Instances}
-
-To evaluate the solver beyond homogeneous batch replication, we tested it against 11 famous ``hardest known Sudoku'' instances from published sources, including AI~Escargot~\cite{inkala2006}, Inkala's 2010 construction, Golden Nugget, Easter Monster, Platinum Blonde, and the \emph{champagne}~(2010) puzzle designed to maximize backtracking in na\"ive solvers. These puzzles range from 17 to 23 clues and are standard benchmarks in the Sudoku solving community. Table~\ref{tab:hardest} summarizes the results.
-
-\begin{table}[h]
-\centering
-\caption{Davis GPU solver vs.\ CPU baselines on 11 world's hardest Sudoku instances. GPU time is CUDA kernel time. DFS timeout = 60\,s; CP timeout = 60\,s.}
-\label{tab:hardest}
-\begin{tabular}{@{}lrrrrl@{}}
-\toprule
-Puzzle & Clues & Davis GPU & DLX & DFS & CP \\
-\midrule
-AI Escargot (Inkala 2006) & 23 & \textbf{48.4\,ms} & 115\,ms & 3{,}251\,ms & 6{,}081\,ms \\
-Inkala 2010 & 21 & \textbf{27.8\,ms} & 213\,ms & timeout & 56{,}158\,ms \\
-Golden Nugget & 21 & \textbf{33.0\,ms} & 261\,ms & timeout & timeout \\
-Easter Monster & 21 & \textbf{23.9\,ms} & 777\,ms & timeout & timeout \\
-Platinum Blonde & 21 & \textbf{31.3\,ms} & 707\,ms & timeout & 46{,}929\,ms \\
-Tarek071 & 17 & \textbf{23.2\,ms} & 461\,ms & 2{,}249\,ms & 5{,}763\,ms \\
-17-clue Coloin & 17 & \textbf{20.2\,ms} & 350\,ms & 2{,}697\,ms & 3{,}750\,ms \\
-Escargot variant & 19 & \textbf{25.0\,ms} & 152\,ms & 14{,}050\,ms & 23{,}857\,ms \\
-Norvig hard1 & 17 & \textbf{20.3\,ms} & 854\,ms & timeout & 23{,}880\,ms \\
-Inkala (Norvig hardest) & 22 & \textbf{21.9\,ms} & 230\,ms & 12{,}872\,ms & 30{,}312\,ms \\
-\emph{champagne} 2010 & 18 & \textbf{48.9\,ms} & 208\,ms & 29{,}691\,ms & 28{,}623\,ms \\
-\midrule
-\textbf{Solved} & & \textbf{11/11} & 11/11 & 6/11 & 9/11 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The Davis GPU solver solved all 11 instances in 20--49\,ms, with every puzzle resolved by Phase~III (curvature-guided DFS). Phase~I reduced domains but did not complete any puzzle, and Phase~II was correctly skipped ($\Gamma < 0.35$ for all instances). The fastest solves (17-clue puzzles: Coloin, Norvig hard1) completed in $\sim$20\,ms, while the most complex (AI~Escargot, \emph{champagne}) required $\sim$49\,ms---a variance of only $2.4\times$ across puzzles spanning the full difficulty spectrum.
-
-By contrast, DFS timed out on 5 of 11 puzzles (60\,s limit), and CP timed out on 2. Even DLX, the fastest CPU baseline, was 4--42$\times$ slower than the GPU across all instances. The GPU's consistent sub-50\,ms performance on instances that defeat or severely stress conventional solvers validates the curvature-guided ordering's effectiveness on heterogeneous, adversarial puzzle structures---not only on batch-replicated instances.
-
 \subsection{Limitations}
 
-The batch throughput evaluation (Section~5.3) uses a single puzzle template replicated across the batch; the hardest-instance evaluation (Section~5.4) partially addresses this by testing 11 diverse, adversarial instances spanning 17--23 clues. A full production benchmark should combine heterogeneous instances within a single batch to measure the variance in per-instance solve time under mixed difficulty and to stress-test the straggler-elimination claim. Additionally, comparison against state-of-the-art GPU SAT solvers and parallel CSP solvers on standardized benchmarks (e.g., DIMACS, XCSP3) is required to position the framework relative to existing methods. These experiments are planned for a follow-up study.
+The current evaluation uses a single puzzle template replicated across the batch. A production benchmark should use diverse instances spanning the full $\Gamma$ range to exercise all three phases and to measure the variance in per-instance solve time under heterogeneous difficulty. Additionally, comparison against state-of-the-art GPU SAT solvers and parallel CSP solvers on standardized benchmarks (e.g., DIMACS, XCSP3) is required to position the framework relative to existing methods. These experiments are planned for a follow-up study.
 
 \section{Conclusion}
 
@@ -557,14 +524,7 @@ Curvature-guided wavefront execution demonstrates that the geometric structure o
 
 \section*{Acknowledgment}
 
-\begin{figure}[ht]
-\centering
-\includegraphics[width=0.3\textwidth]{10_blackwell_portrait.jpg}
-\caption{David Harold Blackwell (1919--2010). Photograph by Konrad Jacobs, Seattle, 1967. \textcopyright{} Mathematisches Forschungsinstitut Oberwolfach; used under CC~BY-SA~2.0~DE.}
-\label{fig:blackwell}
-\end{figure}
-
-The GPU architecture targeted in this work bears the name of David H.\ Blackwell (1919--2010; Figure~\ref{fig:blackwell}), the first Black scholar inducted into the National Academy of Sciences and a pioneer of dynamic programming, Bayesian statistics, and game theory. The sequential decision-making under uncertainty at the heart of constraint satisfaction---when to commit, when to branch, when to backtrack---is precisely the domain Blackwell formalized. This paper is offered during Black History Month 2026 with the recognition that the mathematical infrastructure of modern computing rests on foundations he helped build.
+The GPU architecture targeted in this work bears the name of David H.\ Blackwell (1919--2010), the first Black scholar inducted into the National Academy of Sciences and a pioneer of dynamic programming, Bayesian statistics, and game theory. The sequential decision-making under uncertainty at the heart of constraint satisfaction---when to commit, when to branch, when to backtrack---is precisely the domain Blackwell formalized. This paper is offered during Black History Month 2026 with the recognition that the mathematical infrastructure of modern computing rests on foundations he helped build.
 
 \section*{Patent Notice}
 
@@ -582,10 +542,6 @@ The system and methods described in this paper---including but not limited to th
 \bibitem{nemirovskij1983} A.\,S.~Nemirovsky and D.\,B.~Yudin, \textit{Problem Complexity and Method Efficiency in Optimization}, Wiley, 1983.
 
 \bibitem{zhang2018} J.~Zhang, P.~Xiao, R.~Sun, and Z.~Luo, ``A Stochastic Composite Gradient Method with Incremental Variance Reduction,'' \textit{NeurIPS}, 2018.
-
-\bibitem{inkala2006} A.~Inkala, ``AI Escargot --- The Most Difficult Sudoku Puzzle,'' 2006. \url{http://aisudoku.com/index_en.html}
-
-\bibitem{norvig2006} P.~Norvig, ``Solving Every Sudoku Puzzle,'' 2006. \url{http://norvig.com/sudoku.html}
 \end{thebibliography}
 
 \end{document}
