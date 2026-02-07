@@ -1,4 +1,4 @@
-"""GPU-only benchmark: Davis v1 vs v2 vs v3 on the world's hardest puzzles."""
+"""GPU-only benchmark: Davis v1 vs v2 vs v3 vs v4 on the world's hardest puzzles."""
 import subprocess, re, os
 
 GPU_DIR = os.path.join(os.path.dirname(__file__), '..', 'sudoku', 'solvers', 'davis_gpu_solver')
@@ -6,6 +6,7 @@ EXES = {
     'v1': os.path.join(GPU_DIR, 'davis_solver.exe'),
     'v2': os.path.join(GPU_DIR, 'davis_solver_v2.exe'),
     'v3': os.path.join(GPU_DIR, 'davis_solver_v3.exe'),
+    'v4': os.path.join(GPU_DIR, 'davis_solver_v4.exe'),
 }
 
 PUZZLES = {
@@ -51,14 +52,15 @@ def speedup(ok_a, ms_a, ok_b, ms_b):
 
 
 def main():
-    print("=" * 110)
-    print("  Davis GPU Solver Benchmark  —  v1 vs v2 [E1-E6] vs v3 [E1-E8]")
-    print("=" * 110)
+    print("=" * 140)
+    print("  Davis GPU Solver Benchmark  —  v1 vs v2 [E1-E6] vs v3 [E1-E8] vs v4 [review fixes]")
+    print("=" * 140)
     print()
 
-    hdr = f"{'Puzzle':<22s}  {'v1 (ms)':>12s}  {'v2 (ms)':>12s}  {'v3 (ms)':>12s}  {'v1->v2':>8s}  {'v2->v3':>8s}  {'v1->v3':>8s}"
+    hdr = (f"{'Puzzle':<22s}  {'v1 (ms)':>12s}  {'v2 (ms)':>12s}  {'v3 (ms)':>12s}  "
+           f"{'v4 (ms)':>12s}  {'v1->v2':>8s}  {'v3->v4':>8s}  {'v1->v4':>8s}")
     print(hdr)
-    print("-" * 110)
+    print("-" * 140)
 
     all_results = {}
     for name, puz in PUZZLES.items():
@@ -70,18 +72,20 @@ def main():
         v1ok, v1ms, v1ph = row['v1']
         v2ok, v2ms, v2ph = row['v2']
         v3ok, v3ms, v3ph = row['v3']
+        v4ok, v4ms, v4ph = row['v4']
 
         sp12 = speedup(v1ok, v1ms, v2ok, v2ms)
-        sp23 = speedup(v2ok, v2ms, v3ok, v3ms)
-        sp13 = speedup(v1ok, v1ms, v3ok, v3ms)
+        sp34 = speedup(v3ok, v3ms, v4ok, v4ms)
+        sp14 = speedup(v1ok, v1ms, v4ok, v4ms)
 
         line = (f"{name:<22s}  {fmt(v1ok, v1ms, v1ph):>12s}  "
                 f"{fmt(v2ok, v2ms, v2ph):>12s}  {fmt(v3ok, v3ms, v3ph):>12s}  "
-                f"{sp12:>8s}  {sp23:>8s}  {sp13:>8s}")
+                f"{fmt(v4ok, v4ms, v4ph):>12s}  "
+                f"{sp12:>8s}  {sp34:>8s}  {sp14:>8s}")
         print(line)
         all_results[name] = row
 
-    print("-" * 110)
+    print("-" * 140)
 
     # Averages
     for ver in EXES:
