@@ -738,38 +738,75 @@ class DavisSolver:
         """Recursive DFS with constraint propagation and Davis-inspired ordering."""
         self.nodes_explored += 1
         
-        # Select cell: MRV (fewest candidates first).
-        # On tie: pick cell with most constrained peers (curvature proxy).
+        # Cell selection: combined Information Value V(c) × Susceptibility χ(c).
+        #
+        # V(c) = [K(c) + Σ_peers K(p)] / |C(c)|   (curvature-weighted info)
+        # χ(c) = |C(c)| · Σ_peers overlap(c,p)/|C(p)| (perturbation impact)
+        # Score = V(c) · (1 + α·χ(c))               (S5, Conjecture 7.1)
+        #
+        # V captures "how much information does resolving c give us?"
+        # χ captures "how unstable is c — how hard will resolution cascade?"
+        # Combined: "which unstable cell, when resolved, stabilizes the most?"
+        ALPHA = 0.5  # Susceptibility weight
+        
         best_cell = None
-        best_count = 10
-        ties = []
+        best_score = -1.0
         
         for r in range(9):
             for c in range(9):
                 if board[r][c] == 0:
-                    cnt = self._popcount(cands[r][c])
-                    if cnt == 0:
+                    mask = cands[r][c]
+                    n_cands = self._popcount(mask)
+                    if n_cands == 0:
                         self.backtracks += 1
                         return False  # Dead end
-                    if cnt < best_count:
-                        best_count = cnt
+                    
+                    # Curvature K(c): saturation + scarcity + coupling
+                    filled = 0
+                    coupling_sum = 0
+                    empty_peers = 0
+                    for (pr, pc) in self._peers[r][c]:
+                        if board[pr][pc] != 0:
+                            filled += 1
+                        else:
+                            overlap = self._popcount(mask & cands[pr][pc])
+                            coupling_sum += overlap
+                            empty_peers += 1
+                    sat = filled / 20.0
+                    scar = 1.0 - n_cands / 9.0
+                    coup = (coupling_sum / (empty_peers * n_cands)
+                            if empty_peers > 0 and n_cands > 0 else 0.0)
+                    K_c = 0.4 * sat + 0.35 * scar + 0.25 * coup
+                    
+                    # Region curvature for V(c)
+                    region_K = K_c
+                    for (pr, pc) in self._peers[r][c]:
+                        if board[pr][pc] == 0:
+                            pm = cands[pr][pc]
+                            pn = self._popcount(pm)
+                            if pn > 0:
+                                pf = sum(1 for (pr2, pc2) in self._peers[pr][pc]
+                                         if board[pr2][pc2] != 0)
+                                region_K += 0.4 * (pf / 20.0) + 0.35 * (1.0 - pn / 9.0)
+                    V = region_K / n_cands
+                    
+                    # Susceptibility χ(c) = |C(c)| · Σ_peers overlap/|C(peer)|
+                    chi = 0.0
+                    for (pr, pc) in self._peers[r][c]:
+                        if board[pr][pc] == 0:
+                            pm = cands[pr][pc]
+                            pn = self._popcount(pm)
+                            if pn > 0:
+                                chi += self._popcount(mask & pm) / pn
+                    chi *= n_cands
+                    
+                    score = V * (1.0 + ALPHA * chi)
+                    if score > best_score:
+                        best_score = score
                         best_cell = (r, c)
-                        ties = [(r, c)]
-                    elif cnt == best_count:
-                        ties.append((r, c))
         
         if best_cell is None:
             return True  # All cells filled — solved
-        
-        # Curvature tiebreak: among cells with same candidate count,
-        # pick the one with most constrained peers (highest coupling)
-        if len(ties) > 1:
-            best_coupling = -1
-            for (r, c) in ties:
-                coupling = self._peer_coupling(board, cands, r, c)
-                if coupling > best_coupling:
-                    best_coupling = coupling
-                    best_cell = (r, c)
         
         row, col = best_cell
         mask = cands[row][col]

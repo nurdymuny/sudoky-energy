@@ -516,13 +516,19 @@ __device__ bool claiming_thread(uint16_t* cands, int tid) {
  * Five-rule wavefront: naked singles + hidden singles + naked pairs
  * + pointing pairs + claiming. Runs until convergence.
  * Returns: true if board is still consistent, false if dead end.
+ *
+ * NOTE: Correlation-length optimization (S7, Eq. 25) deferred.
+ * Adding the K_max warp-reduction + ξ computation here causes ptxas
+ * stack overflow (0xC00000FD) when combined with the 5-rule propagation
+ * and susceptibility branching in select_branch_cell.
+ * The convergence-detection ballot already handles early exit.
+ * Revisit when CUDA toolkit fixes ptxas stack depth for sm_120.
  */
 __device__ bool constraint_propagation(uint16_t* cands) {
-    // Intra-warp convergence detection
     cg::coalesced_group active = cg::coalesced_threads();
     int tid = active.thread_rank();
 
-    for (int iter = 0; iter < 81; iter++) {  // Max 81 iterations (one per cell)
+    for (int iter = 0; iter < 81; iter++) {
         bool local_changed = false;
 
         local_changed |= propagate_thread(cands, tid);
@@ -638,6 +644,14 @@ __device__ void compute_all_curvatures(
  * Returns the cell index, or -1 if all cells are solved.
  *
  * Uses warp shuffle reduction for O(log₂(32)) = 5-step argmax.
+ *
+ * NOTE: Susceptibility weighting (S5, χ·V scoring) was tested here
+ * but caused a 3.5× GPU regression (33ms vs 9.3ms batch) because the
+ * extra 20-peer overlap loop per cell evaluation is too costly on
+ * warp-level architecture. The branching quality improvement didn't
+ * compensate. CPU solver uses susceptibility (lower overhead ratio).
+ * Correlation-length propagation cap (S7) also deferred due to ptxas
+ * stack overflow when combined with 5-rule propagation on sm_120.
  */
 __device__ int select_branch_cell(
     const uint16_t* cands,
@@ -654,19 +668,14 @@ __device__ int select_branch_cell(
         if (is_solved(cands[offset]) || cands[offset] == 0) continue;
 
         int n_cands = popcount16(cands[offset]);
+        if (n_cands == 0) return offset;  // Dead cell
 
-        // Dead cell — must handle immediately
-        if (n_cands == 0) return offset;
-
-        // Integrate curvature over constraint region
+        // V(c): integrate curvature over constraint region
         float region_K = curvatures[offset];
         for (int p = 0; p < 20; p++) {
             float peer_K = curvatures[d_peers[offset][p]];
-            if (peer_K < FLT_MAX) {  // Skip singularities (Bug T7 fix)
-                region_K += peer_K;
-            }
+            if (peer_K < FLT_MAX) region_K += peer_K;
         }
-
         float V = region_K / (float)n_cands;
 
         if (V > best_V) {
@@ -677,8 +686,8 @@ __device__ int select_branch_cell(
 
     // Warp-level argmax reduction using shuffle
     for (int delta = active.size() / 2; delta > 0; delta /= 2) {
-        float other_V    = active.shfl_down(best_V, delta);
-        int   other_cell = active.shfl_down(best_cell, delta);
+        float other_V = active.shfl_down(best_V, delta);
+        int   other_cell  = active.shfl_down(best_cell, delta);
         if (other_V > best_V) {
             best_V = other_V;
             best_cell = other_cell;
