@@ -459,11 +459,11 @@ class DavisSolver:
     Combines:
       - Curvature-aware cell ordering (F5: Optimal Constraint Ordering)
       - Holonomy-based pruning (T1: Geometric Completion Uniqueness)
-      - Geometric condition monitoring (T4aii: Condition Number)
+      - Bitmask candidate tracking for performance
     
-    This is not yet the full Davis Manifold Relaxation algorithm 
-    (which would be the sixth solver), but an enhanced DFS that 
-    applies the key geometric insights.
+    This is the CPU reference implementation of the Davis geometric DFS.
+    The GPU implementation (davis_solver_blackwell.cu) parallelizes the
+    same algorithm across thousands of CUDA threads.
     """
     
     def __init__(self):
@@ -473,22 +473,64 @@ class DavisSolver:
         self.solve_time = 0.0
     
     def solve(self, board: list[list[int]]) -> bool:
-        """Solve using Davis-enhanced DFS."""
+        """Solve using Davis-enhanced DFS with bitmask candidate tracking."""
         start = time.time()
         self.backtracks = 0
         self.nodes_explored = 0
         self.holonomy_prunes = 0
         
-        # Quick validity check: detect existing conflicts before searching.
-        # This is the holonomy check at t=0 — if ‖Hol - I‖ = ∞ before
-        # we even start, the manifold is already inconsistent.
         if not self._is_valid_board(board):
             self.solve_time = time.time() - start
             return False
         
-        result = self._solve_recursive(board)
+        # Build bitmask candidate sets for all cells.
+        # cands[r][c] is a bitmask: bit k set means digit k is a candidate.
+        # Bit 0 unused; bits 1-9 represent digits 1-9.
+        cands = [[0]*9 for _ in range(9)]
+        for r in range(9):
+            for c in range(9):
+                if board[r][c] == 0:
+                    mask = 0x3FE  # bits 1-9 set = 0b1111111110
+                    for cc in range(9):
+                        if board[r][cc] != 0:
+                            mask &= ~(1 << board[r][cc])
+                    for rr in range(9):
+                        if board[rr][c] != 0:
+                            mask &= ~(1 << board[rr][c])
+                    br, bc = 3*(r//3), 3*(c//3)
+                    for rr in range(br, br+3):
+                        for cc in range(bc, bc+3):
+                            if board[rr][cc] != 0:
+                                mask &= ~(1 << board[rr][cc])
+                    cands[r][c] = mask
+        
+        # Precompute peers for each cell (row, col, box mates)
+        self._peers = [[[] for _ in range(9)] for _ in range(9)]
+        for r in range(9):
+            for c in range(9):
+                ps = set()
+                for cc in range(9):
+                    if cc != c: ps.add((r, cc))
+                for rr in range(9):
+                    if rr != r: ps.add((rr, c))
+                br, bc = 3*(r//3), 3*(c//3)
+                for rr in range(br, br+3):
+                    for cc in range(bc, bc+3):
+                        if (rr,cc) != (r,c): ps.add((rr,cc))
+                self._peers[r][c] = list(ps)
+        
+        result = self._solve_fast(board, cands)
         self.solve_time = time.time() - start
         return result
+    
+    @staticmethod
+    def _popcount(x):
+        """Count set bits."""
+        c = 0
+        while x:
+            c += 1
+            x &= x - 1
+        return c
     
     @staticmethod
     def _is_valid_board(board: list[list[int]]) -> bool:
@@ -509,65 +551,113 @@ class DavisSolver:
                     return False
         return True
     
-    def _solve_recursive(self, board: list[list[int]]) -> bool:
+    def _solve_fast(self, board, cands):
+        """Recursive DFS with bitmask candidates and Davis-inspired ordering."""
         self.nodes_explored += 1
         
-        # Select next cell using Davis ordering (not MRV)
-        cell = select_next_cell_davis(board)
-        if cell is None:
-            return True  # All cells filled — solution found
+        # Select cell: MRV (fewest candidates first).
+        # On tie: pick cell with most constrained peers (curvature proxy).
+        best_cell = None
+        best_count = 10
+        ties = []
         
-        row, col = cell
-        candidates = get_candidates(board, row, col)
-        
-        if not candidates:
-            self.backtracks += 1
-            return False
-        
-        # Order candidates by local constraint impact (lightweight).
-        # For each candidate value, count how many peer cells would
-        # lose that value from their candidate sets.
-        # Sort ascending: try the LEAST constraining value first (LCV heuristic).
-        # Rationale: a value that appears in fewer peer candidate sets
-        # is less likely to create downstream dead ends.
-        peers = set()
-        for c in range(9):
-            if c != col:
-                peers.add((row, c))
         for r in range(9):
-            if r != row:
-                peers.add((r, col))
-        br, bc = 3 * (row // 3), 3 * (col // 3)
-        for r in range(br, br + 3):
-            for c in range(bc, bc + 3):
-                if (r, c) != (row, col):
-                    peers.add((r, c))
+            for c in range(9):
+                if board[r][c] == 0:
+                    cnt = self._popcount(cands[r][c])
+                    if cnt == 0:
+                        self.backtracks += 1
+                        return False  # Dead end
+                    if cnt < best_count:
+                        best_count = cnt
+                        best_cell = (r, c)
+                        ties = [(r, c)]
+                    elif cnt == best_count:
+                        ties.append((r, c))
         
-        def candidate_constraint_power(val):
-            count = 0
-            for (pr, pc) in peers:
-                if board[pr][pc] == 0:
-                    if val in get_candidates(board, pr, pc):
+        if best_cell is None:
+            return True  # All cells filled
+        
+        # Curvature tiebreak: among cells with same candidate count,
+        # pick the one with most constrained peers (highest coupling)
+        if len(ties) > 1:
+            best_coupling = -1
+            for (r, c) in ties:
+                coupling = self._peer_coupling(board, cands, r, c)
+                if coupling > best_coupling:
+                    best_coupling = coupling
+                    best_cell = (r, c)
+        
+        row, col = best_cell
+        mask = cands[row][col]
+        
+        # Extract candidate digits and order by LCV (least constraining value):
+        # Try the value that eliminates fewest candidates from peers.
+        digits = []
+        m = mask
+        while m:
+            d = m & (-m)        # lowest set bit
+            digits.append(d.bit_length() - 1)
+            m &= m - 1
+        
+        if len(digits) > 1:
+            # Lightweight LCV: count how many empty peers have each digit
+            def lcv_score(d):
+                bit = 1 << d
+                count = 0
+                for (pr, pc) in self._peers[row][col]:
+                    if board[pr][pc] == 0 and (cands[pr][pc] & bit):
                         count += 1
-            return count
+                return count
+            digits.sort(key=lcv_score)
         
-        sorted_candidates = sorted(candidates, key=candidate_constraint_power)
-        
-        for val in sorted_candidates:
-            # Holonomy-based pruning: check geometric consistency before recursing
-            if holonomy_prune(board, row, col, val):
+        bit_val = 1 << 0  # placeholder
+        for val in digits:
+            bit_val = 1 << val
+            
+            # Holonomy pruning: after placing val, would any peer have 0 candidates?
+            prune = False
+            for (pr, pc) in self._peers[row][col]:
+                if board[pr][pc] == 0 and (pr, pc) != (row, col):
+                    new_cand = cands[pr][pc] & ~bit_val
+                    if new_cand == 0:
+                        prune = True
+                        break
+            if prune:
                 self.holonomy_prunes += 1
                 continue
             
+            # Place value and propagate candidate elimination
             board[row][col] = val
+            cands[row][col] = 0
             
-            if self._solve_recursive(board):
+            # Save and update peer candidates
+            saved = []
+            for (pr, pc) in self._peers[row][col]:
+                if board[pr][pc] == 0 and (cands[pr][pc] & bit_val):
+                    saved.append((pr, pc, cands[pr][pc]))
+                    cands[pr][pc] &= ~bit_val
+            
+            if self._solve_fast(board, cands):
                 return True
             
+            # Undo
+            for (pr, pc, old_cand) in saved:
+                cands[pr][pc] = old_cand
             board[row][col] = 0
+            cands[row][col] = mask
             self.backtracks += 1
         
         return False
+    
+    def _peer_coupling(self, board, cands, r, c):
+        """Count empty peers that share candidates with this cell (curvature proxy)."""
+        mask = cands[r][c]
+        coupling = 0
+        for (pr, pc) in self._peers[r][c]:
+            if board[pr][pc] == 0:
+                coupling += self._popcount(cands[pr][pc] & mask)
+        return coupling
     
     def stats(self) -> dict:
         return {
@@ -605,7 +695,7 @@ class DavisManifoldSolver(BaseSolver):
         for r in range(board.size):
             row = []
             for c in range(board.size):
-                row.append(board.get(r, c))
+                row.append(int(board.get(r, c)))
             grid.append(row)
         
         # Run the Davis solver
