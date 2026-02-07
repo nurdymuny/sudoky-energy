@@ -13,9 +13,13 @@ from sudoku.solvers.dfs_solver import DFSSolver
 from sudoku.solvers.cp_solver import CPSolver
 from sudoku.solvers.davis_solver import DavisManifoldSolver
 
-# Path to the compiled GPU solver
+# Paths to the compiled GPU solvers
 GPU_EXE = os.path.join(os.path.dirname(__file__), '..', 'sudoku', 'solvers',
                        'davis_gpu_solver', 'davis_solver.exe')
+GPU_V2_EXE = os.path.join(os.path.dirname(__file__), '..', 'sudoku', 'solvers',
+                          'davis_gpu_solver', 'davis_solver_v2.exe')
+GPU_V3_EXE = os.path.join(os.path.dirname(__file__), '..', 'sudoku', 'solvers',
+                          'davis_gpu_solver', 'davis_solver_v3.exe')
 
 # World's hardest Sudoku puzzles (published sources)
 HARDEST_PUZZLES = {
@@ -32,8 +36,8 @@ HARDEST_PUZZLES = {
     "champagne 2010":                  "000000000000000000009010800000700360060300008001006000080020900000005020070000004",
 }
 
-# Solver ordering: Davis GPU first, then Davis CPU, then baselines
-SOLVER_NAMES = ["Davis GPU", "Davis CPU", "DLX", "DFS", "CP"]
+# Solver ordering: GPU v1, GPU v2, Davis CPU, then baselines
+SOLVER_NAMES = ["Davis GPU", "Davis GPU v2", "Davis GPU v3", "Davis CPU", "DLX", "DFS", "CP"]
 
 # Per-solver timeout in seconds
 SOLVER_TIMEOUT = {
@@ -84,9 +88,9 @@ def verify_solution(grid):
                 return False
     return True
 
-def run_gpu_solver(puzzle_str: str) -> dict:
-    """Run the Davis GPU (CUDA) solver on a single puzzle string via CLI."""
-    exe = os.path.abspath(GPU_EXE)
+def run_gpu_solver(puzzle_str: str, exe_path: str | None = None) -> dict:
+    """Run a Davis GPU (CUDA) solver on a single puzzle string via CLI."""
+    exe = os.path.abspath(exe_path or GPU_EXE)
     if not os.path.isfile(exe):
         return {"solved": False, "time_ms": -1, "error": f"GPU exe not found: {exe}"}
     try:
@@ -136,14 +140,24 @@ def run_gpu_solver(puzzle_str: str) -> dict:
 def main():
     print("=" * 96)
     print("  World's Hardest Sudoku — Multi-Solver Benchmark")
-    print("  Davis GPU (CUDA) · Davis CPU · DLX · DFS · CP")
+    print("  Davis GPU v1 · Davis GPU v2 [E1-E6] · Davis GPU v3 [E1-E8] · Davis CPU · DLX · DFS · CP")
     print("=" * 96)
 
     gpu_available = os.path.isfile(os.path.abspath(GPU_EXE))
+    gpu_v2_available = os.path.isfile(os.path.abspath(GPU_V2_EXE))
+    gpu_v3_available = os.path.isfile(os.path.abspath(GPU_V3_EXE))
     if gpu_available:
-        print(f"  ✓ GPU solver found: {os.path.abspath(GPU_EXE)}")
+        print(f"  ✓ GPU v1 solver: {os.path.abspath(GPU_EXE)}")
     else:
-        print(f"  ✗ GPU solver not found — skipping Davis GPU")
+        print(f"  ✗ GPU v1 solver not found — skipping")
+    if gpu_v2_available:
+        print(f"  ✓ GPU v2 solver: {os.path.abspath(GPU_V2_EXE)}")
+    else:
+        print(f"  ✗ GPU v2 solver not found — skipping")
+    if gpu_v3_available:
+        print(f"  ✓ GPU v3 solver: {os.path.abspath(GPU_V3_EXE)}")
+    else:
+        print(f"  ✗ GPU v3 solver not found — skipping")
 
     python_solvers = [
         ("Davis CPU", DavisManifoldSolver),
@@ -175,6 +189,48 @@ def main():
             else:
                 print(f"  {'Davis GPU':10s}: ✗ FAILED  {gpu_result['time_ms']:8.1f} ms")
             results[name]["Davis GPU"] = gpu_result
+
+        # ── Davis GPU v2 (CUDA, thermodynamic enhancements [E1-E6]) ──
+        if gpu_v2_available:
+            gpu2_result = run_gpu_solver(puzzle_str, exe_path=GPU_V2_EXE)
+            if "error" in gpu2_result:
+                print(f"  {'Davis GPU v2':14s}: ERROR — {gpu2_result['error']}")
+            elif gpu2_result["solved"]:
+                g = gpu2_result
+                # Show speedup vs v1 if both solved
+                speedup = ""
+                if gpu_available and "Davis GPU" in results[name] and results[name]["Davis GPU"].get("solved"):
+                    v1_ms = results[name]["Davis GPU"]["time_ms"]
+                    if g['time_ms'] > 0:
+                        ratio = v1_ms / g['time_ms']
+                        speedup = f"  [{ratio:.2f}× vs v1]"
+                print(f"  {'Davis GPU v2':14s}: ✓ SOLVED  {g['time_ms']:8.1f} ms  "
+                      f"(P1: {g['p1_ms']:.1f}  P2: {g['p2_ms']:.1f}  "
+                      f"P3: {g['p3_ms']:.1f} ms, solved by {g['phase']}){speedup}")
+            else:
+                print(f"  {'Davis GPU v2':14s}: ✗ FAILED  {gpu2_result['time_ms']:8.1f} ms")
+            results[name]["Davis GPU v2"] = gpu2_result
+
+        # ── Davis GPU v3 (CUDA, speculative branching [E1-E8]) ──
+        if gpu_v3_available:
+            gpu3_result = run_gpu_solver(puzzle_str, exe_path=GPU_V3_EXE)
+            if "error" in gpu3_result:
+                print(f"  {'Davis GPU v3':14s}: ERROR — {gpu3_result['error']}")
+            elif gpu3_result["solved"]:
+                g = gpu3_result
+                # Show speedup vs v2 if both solved
+                speedup = ""
+                if gpu_v2_available and "Davis GPU v2" in results[name] and results[name]["Davis GPU v2"].get("solved"):
+                    v2_ms = results[name]["Davis GPU v2"]["time_ms"]
+                    if g['time_ms'] > 0:
+                        ratio = v2_ms / g['time_ms']
+                        speedup = f"  [{ratio:.2f}× vs v2]"
+                print(f"  {'Davis GPU v3':14s}: ✓ SOLVED  {g['time_ms']:8.1f} ms  "
+                      f"(P1: {g['p1_ms']:.1f}  P2: {g['p2_ms']:.1f}  "
+                      f"P3: {g['p3_ms']:.1f} ms, solved by {g['phase']}){speedup}")
+            else:
+                print(f"  {'Davis GPU v3':14s}: ✗ FAILED  {gpu3_result['time_ms']:8.1f} ms")
+            results[name]["Davis GPU v3"] = gpu3_result
 
         # ── Python solvers (Davis CPU, DLX, DFS, CP) ──
         for solver_name, solver_cls in python_solvers:
@@ -219,28 +275,45 @@ def main():
                 results[name][solver_name] = {"solved": False, "time_ms": -1, "error": str(e)}
 
     # ── Summary Table ──
-    print(f"\n\n{'=' * 96}")
+    width = 120
+    print(f"\n\n{'=' * width}")
     print("  SUMMARY")
-    print(f"{'=' * 96}")
+    print(f"{'=' * width}")
     header = f"\n{'Puzzle':<30s} {'Clues':>5s}"
     for s in SOLVER_NAMES:
-        header += f" {s:>12s}"
+        header += f" {s:>14s}"
+    header += f" {'v1→v2':>8s} {'v2→v3':>8s}"
     print(header)
-    print("─" * 96)
+    print("─" * width)
 
     for name, data in results.items():
         row = f"{name:<30s} {data['clues']:>5d}"
         for s in SOLVER_NAMES:
             if s in data and data[s].get("solved"):
-                row += f" {data[s]['time_ms']:>10.1f}ms"
+                row += f" {data[s]['time_ms']:>12.1f}ms"
             elif s in data and data[s].get("error") == "TIMEOUT":
-                row += f" {'TIMEOUT':>12s}"
+                row += f" {'TIMEOUT':>14s}"
             elif s in data and "error" in data[s]:
-                row += f" {'ERROR':>12s}"
+                row += f" {'ERROR':>14s}"
             elif s in data:
-                row += f" {'FAILED':>12s}"
+                row += f" {'FAILED':>14s}"
             else:
-                row += f" {'N/A':>12s}"
+                row += f" {'N/A':>14s}"
+        # Speedup column: v1 / v2
+        v1 = data.get("Davis GPU", {})
+        v2 = data.get("Davis GPU v2", {})
+        v3 = data.get("Davis GPU v3", {})
+        if v1.get("solved") and v2.get("solved") and v2["time_ms"] > 0:
+            ratio = v1["time_ms"] / v2["time_ms"]
+            row += f" {ratio:>7.2f}×"
+        else:
+            row += f" {'—':>8s}"
+        # Speedup column: v2 / v3
+        if v2.get("solved") and v3.get("solved") and v3["time_ms"] > 0:
+            ratio = v2["time_ms"] / v3["time_ms"]
+            row += f" {ratio:>7.2f}×"
+        else:
+            row += f" {'—':>8s}"
         print(row)
 
     # Solve counts
