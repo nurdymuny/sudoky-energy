@@ -457,6 +457,7 @@ class DavisSolver:
     Sudoku solver using Davis Field Equations.
     
     Combines:
+      - Constraint propagation (naked singles + hidden singles wavefront)
       - Curvature-aware cell ordering (F5: Optimal Constraint Ordering)
       - Holonomy-based pruning (T1: Geometric Completion Uniqueness)
       - Bitmask candidate tracking for performance
@@ -464,20 +465,26 @@ class DavisSolver:
     This is the CPU reference implementation of the Davis geometric DFS.
     The GPU implementation (davis_solver_blackwell.cu) parallelizes the
     same algorithm across thousands of CUDA threads.
+    
+    The propagation loop mirrors the GPU Phase 1 wavefront: after each
+    guess, all forced consequences (naked singles and hidden singles)
+    are resolved before the next branching decision.
     """
     
     def __init__(self):
         self.backtracks = 0
         self.nodes_explored = 0
         self.holonomy_prunes = 0
+        self.propagations = 0
         self.solve_time = 0.0
     
     def solve(self, board: list[list[int]]) -> bool:
-        """Solve using Davis-enhanced DFS with bitmask candidate tracking."""
+        """Solve using Davis-enhanced DFS with constraint propagation."""
         start = time.time()
         self.backtracks = 0
         self.nodes_explored = 0
         self.holonomy_prunes = 0
+        self.propagations = 0
         
         if not self._is_valid_board(board):
             self.solve_time = time.time() - start
@@ -519,6 +526,27 @@ class DavisSolver:
                         if (rr,cc) != (r,c): ps.add((rr,cc))
                 self._peers[r][c] = list(ps)
         
+        # Precompute unit membership for hidden singles detection.
+        # _units[r][c] = list of units (each unit is a list of (r,c) cells)
+        # that cell (r,c) belongs to.  3 units per cell: row, col, box.
+        self._row_units = []
+        for r in range(9):
+            self._row_units.append([(r, c) for c in range(9)])
+        self._col_units = []
+        for c in range(9):
+            self._col_units.append([(r, c) for r in range(9)])
+        self._box_units = []
+        for br in range(0, 9, 3):
+            for bc in range(0, 9, 3):
+                self._box_units.append(
+                    [(r, c) for r in range(br, br+3) for c in range(bc, bc+3)])
+        self._all_units = self._row_units + self._col_units + self._box_units
+        
+        # Run initial propagation before any guessing
+        if not self._propagate(board, cands):
+            self.solve_time = time.time() - start
+            return False
+        
         result = self._solve_fast(board, cands)
         self.solve_time = time.time() - start
         return result
@@ -551,8 +579,163 @@ class DavisSolver:
                     return False
         return True
     
+    def _propagate(self, board, cands):
+        """
+        Constraint propagation wavefront (mirrors GPU Phase 1).
+        
+        Five rules in fixpoint loop, ordered by cost:
+          1. Naked singles   — cell with 1 candidate → forced
+          2. Hidden singles  — digit with 1 possible cell in a unit → forced
+          3. Naked pairs     — two cells sharing a 2-candidate mask → eliminate from unit
+          4. Pointing pairs  — digit confined to one row/col in a box → eliminate outside
+          5. Claiming         — digit confined to one box in a row/col → eliminate outside
+        
+        Returns True if consistent, False if contradiction detected.
+        """
+        changed = True
+        while changed:
+            changed = False
+            
+            # --- Naked singles: cells with exactly 1 candidate ---
+            for r in range(9):
+                for c in range(9):
+                    if board[r][c] == 0:
+                        mask = cands[r][c]
+                        if mask == 0:
+                            return False  # Contradiction
+                        if self._popcount(mask) == 1:
+                            val = mask.bit_length() - 1
+                            board[r][c] = val
+                            cands[r][c] = 0
+                            bit_val = 1 << val
+                            self.propagations += 1
+                            for (pr, pc) in self._peers[r][c]:
+                                if cands[pr][pc] & bit_val:
+                                    cands[pr][pc] &= ~bit_val
+                                    if board[pr][pc] == 0 and cands[pr][pc] == 0:
+                                        return False
+                            changed = True
+            
+            # --- Hidden singles: digit with only one possible cell in a unit ---
+            for unit in self._all_units:
+                for d in range(1, 10):
+                    bit = 1 << d
+                    already = False
+                    possible_cell = None
+                    count = 0
+                    for (r, c) in unit:
+                        if board[r][c] == d:
+                            already = True
+                            break
+                        if board[r][c] == 0 and (cands[r][c] & bit):
+                            count += 1
+                            possible_cell = (r, c)
+                    if already:
+                        continue
+                    if count == 0:
+                        return False  # Digit can't go anywhere → contradiction
+                    if count == 1:
+                        r, c = possible_cell
+                        if self._popcount(cands[r][c]) > 1:
+                            cands[r][c] = bit
+                            self.propagations += 1
+                            changed = True
+            
+            # --- Naked pairs: two cells with identical 2-candidate mask ---
+            for unit in self._all_units:
+                empty = [(r, c, cands[r][c]) for (r, c) in unit
+                         if board[r][c] == 0 and cands[r][c] != 0]
+                for i in range(len(empty)):
+                    ri, ci, mi = empty[i]
+                    if self._popcount(mi) != 2:
+                        continue
+                    for j in range(i + 1, len(empty)):
+                        rj, cj, mj = empty[j]
+                        if mi == mj:
+                            # Locked pair — eliminate both digits from rest of unit
+                            for (r, c) in unit:
+                                if (r, c) != (ri, ci) and (r, c) != (rj, cj):
+                                    if board[r][c] == 0 and (cands[r][c] & mi):
+                                        cands[r][c] &= ~mi
+                                        if cands[r][c] == 0:
+                                            return False
+                                        changed = True
+            
+            # --- Pointing pairs: digit in box confined to one row/col ---
+            for box_idx, box_unit in enumerate(self._box_units):
+                br = (box_idx // 3) * 3
+                bc = (box_idx % 3) * 3
+                for d in range(1, 10):
+                    bit = 1 << d
+                    cells = [(r, c) for (r, c) in box_unit
+                             if board[r][c] == 0 and (cands[r][c] & bit)]
+                    if len(cells) < 2:
+                        continue
+                    rows = set(r for r, c in cells)
+                    cols = set(c for r, c in cells)
+                    if len(rows) == 1:
+                        row = next(iter(rows))
+                        for c in range(9):
+                            if (c < bc or c >= bc + 3):
+                                if board[row][c] == 0 and (cands[row][c] & bit):
+                                    cands[row][c] &= ~bit
+                                    if cands[row][c] == 0:
+                                        return False
+                                    changed = True
+                    if len(cols) == 1:
+                        col = next(iter(cols))
+                        for r in range(9):
+                            if (r < br or r >= br + 3):
+                                if board[r][col] == 0 and (cands[r][col] & bit):
+                                    cands[r][col] &= ~bit
+                                    if cands[r][col] == 0:
+                                        return False
+                                    changed = True
+            
+            # --- Claiming: digit in row/col confined to one box ---
+            for r in range(9):
+                for d in range(1, 10):
+                    bit = 1 << d
+                    cells = [(r, c) for c in range(9)
+                             if board[r][c] == 0 and (cands[r][c] & bit)]
+                    if len(cells) < 2:
+                        continue
+                    boxes = set(c // 3 for _, c in cells)
+                    if len(boxes) == 1:
+                        bc = next(iter(boxes)) * 3
+                        box_r = 3 * (r // 3)
+                        for rr in range(box_r, box_r + 3):
+                            for cc in range(bc, bc + 3):
+                                if rr != r:
+                                    if board[rr][cc] == 0 and (cands[rr][cc] & bit):
+                                        cands[rr][cc] &= ~bit
+                                        if cands[rr][cc] == 0:
+                                            return False
+                                        changed = True
+            for c in range(9):
+                for d in range(1, 10):
+                    bit = 1 << d
+                    cells = [(r, c) for r in range(9)
+                             if board[r][c] == 0 and (cands[r][c] & bit)]
+                    if len(cells) < 2:
+                        continue
+                    boxes = set(r // 3 for r, _ in cells)
+                    if len(boxes) == 1:
+                        br = next(iter(boxes)) * 3
+                        box_c = 3 * (c // 3)
+                        for rr in range(br, br + 3):
+                            for cc in range(box_c, box_c + 3):
+                                if cc != c:
+                                    if board[rr][cc] == 0 and (cands[rr][cc] & bit):
+                                        cands[rr][cc] &= ~bit
+                                        if cands[rr][cc] == 0:
+                                            return False
+                                        changed = True
+        
+        return True
+    
     def _solve_fast(self, board, cands):
-        """Recursive DFS with bitmask candidates and Davis-inspired ordering."""
+        """Recursive DFS with constraint propagation and Davis-inspired ordering."""
         self.nodes_explored += 1
         
         # Select cell: MRV (fewest candidates first).
@@ -576,7 +759,7 @@ class DavisSolver:
                         ties.append((r, c))
         
         if best_cell is None:
-            return True  # All cells filled
+            return True  # All cells filled — solved
         
         # Curvature tiebreak: among cells with same candidate count,
         # pick the one with most constrained peers (highest coupling)
@@ -611,14 +794,13 @@ class DavisSolver:
                 return count
             digits.sort(key=lcv_score)
         
-        bit_val = 1 << 0  # placeholder
         for val in digits:
             bit_val = 1 << val
             
-            # Holonomy pruning: after placing val, would any peer have 0 candidates?
+            # Holonomy pre-check: would this assignment immediately empty a peer?
             prune = False
             for (pr, pc) in self._peers[row][col]:
-                if board[pr][pc] == 0 and (pr, pc) != (row, col):
+                if board[pr][pc] == 0:
                     new_cand = cands[pr][pc] & ~bit_val
                     if new_cand == 0:
                         prune = True
@@ -627,25 +809,25 @@ class DavisSolver:
                 self.holonomy_prunes += 1
                 continue
             
-            # Place value and propagate candidate elimination
+            # Snapshot board + cands for backtracking
+            saved_board = [r[:] for r in board]
+            saved_cands = [r[:] for r in cands]
+            
+            # Place value and eliminate from peers
             board[row][col] = val
             cands[row][col] = 0
-            
-            # Save and update peer candidates
-            saved = []
             for (pr, pc) in self._peers[row][col]:
-                if board[pr][pc] == 0 and (cands[pr][pc] & bit_val):
-                    saved.append((pr, pc, cands[pr][pc]))
-                    cands[pr][pc] &= ~bit_val
+                cands[pr][pc] &= ~bit_val
             
-            if self._solve_fast(board, cands):
+            # Propagate all forced consequences (naked + hidden singles)
+            if self._propagate(board, cands) and self._solve_fast(board, cands):
                 return True
             
-            # Undo
-            for (pr, pc, old_cand) in saved:
-                cands[pr][pc] = old_cand
-            board[row][col] = 0
-            cands[row][col] = mask
+            # Restore from snapshot
+            for r in range(9):
+                for c in range(9):
+                    board[r][c] = saved_board[r][c]
+                    cands[r][c] = saved_cands[r][c]
             self.backtracks += 1
         
         return False
@@ -664,7 +846,8 @@ class DavisSolver:
             "solve_time_ms": round(self.solve_time * 1000, 2),
             "nodes_explored": self.nodes_explored,
             "backtracks": self.backtracks,
-            "holonomy_prunes": self.holonomy_prunes
+            "holonomy_prunes": self.holonomy_prunes,
+            "propagations": self.propagations
         }
 
 
@@ -707,6 +890,7 @@ class DavisManifoldSolver(BaseSolver):
         self.stats.backtracks = inner.backtracks
         self.stats.iterations = inner.nodes_explored
         self.stats.extra["holonomy_prunes"] = inner.holonomy_prunes
+        self.stats.extra["propagations"] = inner.propagations
         
         if not solved:
             return None

@@ -212,9 +212,14 @@ __device__ int count_unsolved(const uint16_t* cands) {
 /* ========================================================================
  * SECTION 3: CONSTRAINT PROPAGATION KERNEL
  *
- * Implements naked singles + hidden singles using bitmask operations.
- * Each thread handles 2-3 cells. Iterates until no changes occur.
+ * Five-rule wavefront propagation using bitmask operations:
+ *   1. Naked singles   — solved cell eliminates its value from 20 peers
+ *   2. Hidden singles  — digit with one possible cell in a unit gets assigned
+ *   3. Naked pairs     — two cells sharing a 2-candidate mask lock those digits
+ *   4. Pointing pairs  — digit confined to one row/col in a box → eliminate outside
+ *   5. Claiming        — digit confined to one box in a row/col → eliminate outside
  *
+ * Each thread handles 2-3 cells. Iterates until no changes occur.
  * This is the "wavefront" — we propagate from solved cells outward.
  * On Blackwell, the warp-level __ballot_sync lets us detect convergence
  * in a single instruction across all 32 threads.
@@ -309,9 +314,207 @@ __device__ bool hidden_singles_thread(uint16_t* cands, int tid) {
     return changed;
 }
 
+
+/**
+ * Naked Pairs: if two cells in a unit share the exact same 2-candidate
+ * bitmask, those two digits are locked to those two cells.
+ * Eliminate both digits from every other cell in the unit.
+ *
+ * Threads 0-26 each process one unit (row/col/box).
+ * Threads 27-31 idle (same as hidden_singles_thread).
+ */
+__device__ bool naked_pairs_thread(uint16_t* cands, int tid) {
+    if (tid >= 27) return false;
+    bool changed = false;
+
+    // Build the 9-cell unit (same mapping as hidden_singles_thread)
+    int unit_cells[9];
+    if (tid < 9) {
+        for (int c = 0; c < 9; c++) unit_cells[c] = tid * 9 + c;
+    } else if (tid < 18) {
+        int col = tid - 9;
+        for (int r = 0; r < 9; r++) unit_cells[r] = r * 9 + col;
+    } else {
+        int box = tid - 18;
+        int br = (box / 3) * 3, bc = (box % 3) * 3;
+        int idx = 0;
+        for (int r = br; r < br + 3; r++)
+            for (int c = bc; c < bc + 3; c++)
+                unit_cells[idx++] = r * 9 + c;
+    }
+
+    // Find pairs: unsolved cells with exactly 2 candidates
+    // Max 9 cells per unit, so brute-force pairwise is fine (≤36 checks)
+    for (int i = 0; i < 9; i++) {
+        int ci = unit_cells[i];
+        uint16_t mi = cands[ci];
+        if (is_solved(mi) || mi == 0 || popcount16(mi) != 2) continue;
+
+        for (int j = i + 1; j < 9; j++) {
+            int cj = unit_cells[j];
+            if (cands[cj] != mi) continue;
+
+            // Naked pair found — eliminate these bits from all others
+            for (int k = 0; k < 9; k++) {
+                if (k == i || k == j) continue;
+                int ck = unit_cells[k];
+                if (!is_solved(cands[ck]) && cands[ck] != 0 && (cands[ck] & mi)) {
+                    cands[ck] &= ~mi;
+                    changed = true;
+                    if (cands[ck] == 0) return changed;  // Contradiction — ballot will see the change
+                }
+            }
+        }
+    }
+
+    return changed;
+}
+
+
+/**
+ * Pointing Pairs (Box → Line reduction):
+ * If digit d within a box is confined to a single row or column,
+ * eliminate d from the rest of that row/column outside the box.
+ *
+ * Threads 0-8 each handle one box (9 boxes total).
+ * Threads 9-31 idle for this rule.
+ */
+__device__ bool pointing_pairs_thread(uint16_t* cands, int tid) {
+    if (tid >= 9) return false;
+    bool changed = false;
+
+    int box = tid;
+    int br = (box / 3) * 3;
+    int bc = (box % 3) * 3;
+
+    // Build box cells
+    int box_cells[9];
+    int idx = 0;
+    for (int r = br; r < br + 3; r++)
+        for (int c = bc; c < bc + 3; c++)
+            box_cells[idx++] = r * 9 + c;
+
+    for (int d = 0; d < 9; d++) {
+        uint16_t bit = (uint16_t)(1 << d);
+
+        // Find which cells in this box contain digit d+1.
+        // NOTE: Include solved cells! Hidden singles may have just
+        // assigned a cell this iteration (not yet propagated). If we
+        // exclude it, the remaining stale candidates look confined to
+        // one row/col → false pointing pair → incorrect elimination.
+        // (CPU version includes them via board[r][c]==0 + cands check.)
+        int rows_seen = 0;
+        int cols_seen = 0;
+        int count = 0;
+
+        for (int k = 0; k < 9; k++) {
+            int cell = box_cells[k];
+            if (cands[cell] != 0 && (cands[cell] & bit)) {
+                rows_seen |= (1 << d_row_of[cell]);
+                cols_seen |= (1 << d_col_of[cell]);
+                count++;
+            }
+        }
+
+        if (count < 2) continue;
+
+        // All in one row?
+        if (popcount16((uint16_t)rows_seen) == 1) {
+            int row = __ffs(rows_seen) - 1;
+            for (int c = 0; c < 9; c++) {
+                if (c >= bc && c < bc + 3) continue;
+                int cell = row * 9 + c;
+                if (!is_solved(cands[cell]) && cands[cell] != 0 && (cands[cell] & bit)) {
+                    cands[cell] &= ~bit;
+                    changed = true;
+                    if (cands[cell] == 0) return changed;
+                }
+            }
+        }
+
+        // All in one column?
+        if (popcount16((uint16_t)cols_seen) == 1) {
+            int col = __ffs(cols_seen) - 1;
+            for (int r = 0; r < 9; r++) {
+                if (r >= br && r < br + 3) continue;
+                int cell = r * 9 + col;
+                if (!is_solved(cands[cell]) && cands[cell] != 0 && (cands[cell] & bit)) {
+                    cands[cell] &= ~bit;
+                    changed = true;
+                    if (cands[cell] == 0) return changed;
+                }
+            }
+        }
+    }
+
+    return changed;
+}
+
+
+/**
+ * Claiming (Line → Box reduction):
+ * If digit d in a row/column is confined to a single box,
+ * eliminate d from the rest of that box outside the row/column.
+ *
+ * Threads 0-8: row claiming (9 rows)
+ * Threads 9-17: column claiming (9 columns)
+ * Threads 18-31: idle
+ */
+__device__ bool claiming_thread(uint16_t* cands, int tid) {
+    if (tid >= 18) return false;
+    bool changed = false;
+
+    bool is_row = (tid < 9);
+    int line = is_row ? tid : (tid - 9);
+
+    for (int d = 0; d < 9; d++) {
+        uint16_t bit = (uint16_t)(1 << d);
+
+        // Find which boxes contain this digit in this row/column.
+        // Include solved cells (same rationale as pointing_pairs_thread).
+        int boxes_seen = 0;
+        int count = 0;
+
+        for (int k = 0; k < 9; k++) {
+            int cell = is_row ? (line * 9 + k) : (k * 9 + line);
+            if (cands[cell] != 0 && (cands[cell] & bit)) {
+                boxes_seen |= (1 << d_box_of[cell]);
+                count++;
+            }
+        }
+
+        if (count < 2) continue;
+
+        // All in one box?
+        if (popcount16((uint16_t)boxes_seen) == 1) {
+            int b = __ffs(boxes_seen) - 1;
+            int bbr = (b / 3) * 3;
+            int bbc = (b % 3) * 3;
+
+            for (int r = bbr; r < bbr + 3; r++) {
+                for (int c = bbc; c < bbc + 3; c++) {
+                    if (is_row && r == line) continue;
+                    if (!is_row && c == line) continue;
+
+                    int cell = r * 9 + c;
+                    if (!is_solved(cands[cell]) && cands[cell] != 0 && (cands[cell] & bit)) {
+                        cands[cell] &= ~bit;
+                        changed = true;
+                        if (cands[cell] == 0) return changed;
+                    }
+                }
+            }
+        }
+    }
+
+    return changed;
+}
+
+
 /**
  * Full constraint propagation loop.
- * Runs naked singles + hidden singles until convergence.
+ * Five-rule wavefront: naked singles + hidden singles + naked pairs
+ * + pointing pairs + claiming. Runs until convergence.
  * Returns: true if board is still consistent, false if dead end.
  */
 __device__ bool constraint_propagation(uint16_t* cands) {
@@ -326,6 +529,15 @@ __device__ bool constraint_propagation(uint16_t* cands) {
         active.sync();
 
         local_changed |= hidden_singles_thread(cands, tid);
+        active.sync();
+
+        local_changed |= naked_pairs_thread(cands, tid);
+        active.sync();
+
+        local_changed |= pointing_pairs_thread(cands, tid);
+        active.sync();
+
+        local_changed |= claiming_thread(cands, tid);
         active.sync();
 
         // Warp-level ballot: did ANY thread make a change?
